@@ -1,10 +1,10 @@
-# 🌐 MANAV SOLS
+# 🌐 MAYANKZEN STDIO
 
-**MANAV SOLS** is my personal brand and portfolio website where I showcase my projects, skills, and development journey.
+**MAYANKZEN STUDIO** is my personal brand and portfolio website where I showcase my projects, skills, and development journey.
 
 ## 🚀 About
 
-MANAV SOLS represents my work in:
+MAYANKZEN STDIO represents my work in:
 
 * Web Development
 * Programming & Software Projects
@@ -19,7 +19,7 @@ Some projects shown or planned under MANAV SOLS:
 
 * 🎮 **Manamons World** — A 3D monster training & battle game (in development)
 * 🤖 **AI Chan** — Virtual desktop assistant (in development)
-* 🌐 **MANAV SOLS Website** — Personal brand & portfolio
+* 🌐 **MAYANKZEN STUDIO Website** — Personal brand & portfolio
 * 📂 Other experimental and learning projects
 
 ## 🛠️ Tech Stack
@@ -42,9 +42,9 @@ To build strong real-world projects and grow as a developer while creating usefu
 
 ## 🔗 Connect
 
-* GitHub: https://github.com/manav9910ms
-* Website: https://manavsols.com
+* GitHub: https://github.com/MAYANK198010
+* Website: https://mayankzen.com
 
 ---
 
-⭐ Thanks for visiting MANAV SOLS!
+⭐ Thanks for visiting MAYANKZEN STUDIO!
