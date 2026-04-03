@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>MayankZen Studios Admin</title>
+
+ <link rel="stylesheet" href="style.css">
+
+<style>
+
+.admin-container{
+max-width:1000px;
+margin:auto;
+padding:40px;
+}
+
+table{
+width:100%;
+border-collapse:collapse;
+margin-top:30px;
+}
+
+th,td{
+padding:12px;
+border-bottom:1px solid #444;
+text-align:left;
+}
+
+select{
+padding:6px;
+}
+
+td{
+max-width:200px;
+white-space:nowrap;
+overflow:hidden;
+text-overflow:ellipsis;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="admin-dashboard">
+  <h1>Studio Monitoring Dashboard</h1>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Total Requests</h3>
+      <span id="totalRequests">0</span>
+    </div>
+    <div class="stat-card">
+      <h3>Pending</h3>
+      <span id="pendingCount">0</span>
+    </div>
+    <div class="stat-card">
+      <h3>Working</h3>
+      <span id="activeCount">0</span>
+    </div>
+    <div class="stat-card">
+      <h3>Completed</h3>
+      <span id="completeCount">0</span>
+    </div>
+  </div>
+  <canvas id="statusChart" width="400" height="400" style="max-width: 300px; margin: 2rem auto; display: block;"></canvas>
+  <div class="requests-list">
+    <table>
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>Service</th>
+          <th>Status</th>
+          <th>Tracking ID</th>
+          <th>Chat</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="requestsTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script type="module" src="admin.js"></script>
+
+</body>
+</html>
