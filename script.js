@@ -8,17 +8,23 @@ let mouseX = 0, mouseY = 0;
 
 function init3DCity() {
   const canvas = document.getElementById('hero3d');
-  if (!canvas) return;
+  if (!canvas || typeof THREE === 'undefined' || !THREE.WebGLRenderer) return;
 
-  scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x0a0e17, 0.008);
+  try {
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0a0e17, 0.008);
 
-  camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 25, 60);
+    camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 25, 60);
 
-  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer = new THREE.WebGLRenderer({
+      canvas,
+      alpha: true,
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   // Lighting
   const ambientLight = new THREE.AmbientLight(0x1a2035, 1.5);
@@ -114,10 +120,15 @@ function init3DCity() {
   animate();
 
   window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    if (camera && renderer) {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
   });
+  } catch (err) {
+    console.debug("3D Scene init note:", err?.message || err);
+  }
 }
 
 // Typing Effect
@@ -166,7 +177,8 @@ onAuthStateChanged(auth, (user) => {
     authLinks.forEach(link => link.style.display = 'none');
     
     if (navList) {
-      const isMayank = user.email === 'mayank198010@gmail.com';
+      const emailLower = (user.email || '').toLowerCase().trim();
+      const isStudioAdmin = emailLower === 'admin@mayankzen.in' || emailLower === 'mayank198010@gmail.com';
       const item = document.createElement('li');
       item.className = 'dynamic-auth';
       item.innerHTML = `
@@ -174,7 +186,7 @@ onAuthStateChanged(auth, (user) => {
       `;
       navList.appendChild(item);
 
-      if (isMayank) {
+      if (isStudioAdmin) {
         const adminItem = document.createElement('li');
         adminItem.className = 'dynamic-auth';
         adminItem.innerHTML = `

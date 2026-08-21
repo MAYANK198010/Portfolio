@@ -8,10 +8,11 @@ import {
   openAttachmentPreview, 
   formatBytes, 
   getFileIcon, 
-  fileToDataUrl 
+  fileToDataUrl,
+  uploadAttachmentToServer
 } from './attachments.js';
 
-// Advanced real-time project chat manager with multi-tab broadcast, IndexedDB caching & attachments
+// Advanced real-time project chat manager with multi-tab broadcast, server sync, IndexedDB caching & attachments
 export function initChat(requestId, userId) {
   const chatContainer = document.getElementById('chatMessages');
   const messageInput = document.getElementById('messageInput');
@@ -70,6 +71,55 @@ export function initChat(requestId, userId) {
     });
   }
 
+  // Upload Progress / Status Indicator Bar
+  let statusBanner = document.getElementById('chatAttachmentStatus');
+  if (!statusBanner && messageInput.parentElement) {
+    statusBanner = document.createElement('div');
+    statusBanner.id = 'chatAttachmentStatus';
+    statusBanner.style.display = 'none';
+    statusBanner.style.padding = '0.35rem 0.85rem';
+    statusBanner.style.fontSize = '0.8rem';
+    statusBanner.style.color = 'var(--accent-green)';
+    statusBanner.style.background = 'rgba(16, 185, 129, 0.1)';
+    statusBanner.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+    statusBanner.style.borderRadius = '6px';
+    statusBanner.style.marginBottom = '0.5rem';
+    messageInput.parentElement.parentElement.insertBefore(statusBanner, messageInput.parentElement);
+  }
+
+  function setUploadStatus(text = '') {
+    if (!statusBanner) return;
+    if (text) {
+      statusBanner.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${text}`;
+      statusBanner.style.display = 'block';
+    } else {
+      statusBanner.style.display = 'none';
+    }
+  }
+
+  // Delegated event listener for chat actions (previews & downloads)
+  chatContainer.onclick = async (e) => {
+    const downloadBtn = e.target.closest('[data-action="download"]');
+    if (downloadBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const fileRef = downloadBtn.getAttribute('data-file-ref');
+      const filename = downloadBtn.getAttribute('data-filename') || 'attachment';
+      downloadAttachment(fileRef, filename);
+      return;
+    }
+
+    const previewTrigger = e.target.closest('[data-action="preview"]');
+    if (previewTrigger) {
+      e.preventDefault();
+      e.stopPropagation();
+      const fileRef = previewTrigger.getAttribute('data-file-ref');
+      const filename = previewTrigger.getAttribute('data-filename') || 'Attachment Preview';
+      openAttachmentPreview(fileRef, filename);
+      return;
+    }
+  };
+
   // Helper to render messages with modern bubble UI
   function renderMessages(messages) {
     if (!messages || messages.length === 0) {
@@ -101,7 +151,7 @@ export function initChat(requestId, userId) {
     dateDiv.innerHTML = `<span><i class="fa-solid fa-lock" style="font-size: 0.65rem;"></i> Active Studio Session</span>`;
     chatContainer.appendChild(dateDiv);
 
-    messages.forEach((msg) => {
+    messages.forEach((msg, idx) => {
       const isSent = msg.uid === userId || (isAdmin && msg.sender === 'admin') || (!isAdmin && msg.sender === 'client' && (!msg.uid || msg.uid === userId || String(msg.uid).startsWith('client_')));
       const senderLabel = isSent ? 'You' : (msg.sender === 'admin' ? 'MayankZen Studio' : 'Client');
       const avatarIcon = isSent ? '<i class="fa-solid fa-user"></i>' : (msg.sender === 'admin' ? '<i class="fa-solid fa-crown"></i>' : '<i class="fa-solid fa-user-tie"></i>');
@@ -130,21 +180,26 @@ export function initChat(requestId, userId) {
       }
 
       // Render Attachment
-      const fileTarget = msg.fileUrl || msg.dataUrl || msg.fileId;
+      const fileId = msg.fileId;
+      const fileTarget = msg.fileUrl || (fileId ? `/api/attachments/${fileId}` : null) || msg.dataUrl || fileId;
+      
       if (fileTarget || msg.filename) {
         const filename = msg.filename || 'attachment';
-        const fileExt = (filename.split('.').pop() || '').toLowerCase();
-        const isImg = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp'].includes(fileExt) || (msg.fileType && msg.fileType.startsWith('image/')) || (typeof fileTarget === 'string' && fileTarget.startsWith('data:image/'));
+        const fileExt = (String(filename).split('.').pop() || '').toLowerCase();
+        const isImg = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg', 'bmp', 'ico'].includes(fileExt) || (msg.fileType && msg.fileType.startsWith('image/')) || (typeof fileTarget === 'string' && fileTarget.startsWith('data:image/'));
         const sizeStr = msg.fileSize ? formatBytes(msg.fileSize) : '';
+        const effectiveSrc = msg.dataUrl || msg.fileUrl || (fileId ? `/api/attachments/${fileId}` : '');
+        const targetRef = fileId || effectiveSrc || fileTarget;
 
-        if (isImg && (msg.fileUrl || msg.dataUrl)) {
-          const imgSrc = msg.fileUrl || msg.dataUrl;
+        if (isImg && (effectiveSrc || fileId)) {
+          const displaySrc = effectiveSrc || `/api/attachments/${fileId}`;
+          const imgElId = `chat_img_${idx}_${Date.now()}`;
           contentHtml += `
-            <div class="chat-image-preview-wrapper" onclick="window.openAttachmentPreview('${escapeHtml(imgSrc)}', '${escapeHtml(filename)}')">
-              <img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(filename)}" loading="lazy" />
+            <div class="chat-image-preview-wrapper" data-action="preview" data-file-ref="${escapeHtml(targetRef)}" data-filename="${escapeHtml(filename)}" style="cursor: pointer;">
+              <img id="${imgElId}" data-file-id="${escapeHtml(fileId || '')}" src="${escapeHtml(displaySrc)}" alt="${escapeHtml(filename)}" loading="lazy" onerror="if(window.getAttachment && this.dataset.fileId){ window.getAttachment(this.dataset.fileId).then(r=>{ if(r && (r.dataUrl || r.blob)) this.src = r.dataUrl || URL.createObjectURL(r.blob); }); }" />
               <div class="chat-image-overlay">
                 <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px;">${escapeHtml(filename)}</span>
-                <button type="button" class="chat-file-action-btn" onclick="event.stopPropagation(); window.downloadAttachment('${escapeHtml(imgSrc)}', '${escapeHtml(filename)}')" title="Download Image">
+                <button type="button" class="chat-file-action-btn" data-action="download" data-file-ref="${escapeHtml(targetRef)}" data-filename="${escapeHtml(filename)}" title="Download Image">
                   <i class="fa-solid fa-download"></i>
                 </button>
               </div>
@@ -162,11 +217,12 @@ export function initChat(requestId, userId) {
                 <div class="chat-file-meta">${sizeStr ? `${sizeStr} • ` : ''}Attachment</div>
               </div>
               <div class="chat-file-btns">
-                ${fileTarget ? `
-                  <button type="button" class="chat-file-action-btn" onclick="window.downloadAttachment('${escapeHtml(fileTarget)}', '${escapeHtml(filename)}')" title="Download file">
-                    <i class="fa-solid fa-download"></i> Download
-                  </button>
-                ` : ''}
+                <button type="button" class="chat-file-action-btn" data-action="preview" data-file-ref="${escapeHtml(targetRef)}" data-filename="${escapeHtml(filename)}" title="Preview file">
+                  <i class="fa-solid fa-eye"></i> View
+                </button>
+                <button type="button" class="chat-file-action-btn" data-action="download" data-file-ref="${escapeHtml(targetRef)}" data-filename="${escapeHtml(filename)}" title="Download file">
+                  <i class="fa-solid fa-download"></i> Download
+                </button>
               </div>
             </div>
           `;
@@ -260,12 +316,11 @@ export function initChat(requestId, userId) {
         await storeAttachment(newMsg.fileId, attachmentPayload);
       }
 
-      // 2. Optimistically update local messages in localStorage (limit base64 size if needed)
+      // 2. Optimistically update local messages in localStorage
       const msgs = JSON.parse(localStorage.getItem(storageKey) || '[]');
       const localMsgCopy = { ...newMsg };
-      // If dataUrl is massive, avoid overflowing localStorage quota
       if (localMsgCopy.dataUrl && localMsgCopy.dataUrl.length > 500000) {
-        delete localMsgCopy.dataUrl; // will load from IndexedDB
+        delete localMsgCopy.dataUrl; // will resolve from server endpoint or IDB
       }
       msgs.push(localMsgCopy);
       localStorage.setItem(storageKey, JSON.stringify(msgs));
@@ -283,11 +338,10 @@ export function initChat(requestId, userId) {
       console.debug('Local storage save error:', e);
     }
 
-    // 4. Push to Firebase Realtime Database
+    // 4. Push to Firebase Realtime Database if connected
     if (realtimeDb) {
       try {
         const chatRef = dbRef(realtimeDb, `chats/${requestId}`);
-        // Strip large dataUrl before pushing to RTDB to preserve database bandwidth
         const rtdbMsg = { ...newMsg };
         if (rtdbMsg.dataUrl && rtdbMsg.dataUrl.length > 20000) {
           delete rtdbMsg.dataUrl;
@@ -327,51 +381,53 @@ export function initChat(requestId, userId) {
     if (!file) return;
 
     const fileId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-    let dataUrl = null;
+    setUploadStatus(`Uploading ${file.name} (${formatBytes(file.size)})...`);
 
     try {
-      dataUrl = await fileToDataUrl(file);
-    } catch (readErr) {
-      console.warn('Could not read file as dataUrl:', readErr);
-    }
+      // 1. Upload to local server / IDB engine
+      const uploadRes = await uploadAttachmentToServer(file, fileId);
 
-    // Save attachment in IndexedDB
-    const attachmentPayload = {
-      id: fileId,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      dataUrl: dataUrl,
-      blob: file
-    };
+      let remoteStorageUrl = null;
 
-    let remoteFileUrl = null;
-
-    // Attempt Firebase Storage upload if available
-    if (storage) {
-      try {
-        const fileRef = storageRef(storage, `chats/${requestId}/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
-        remoteFileUrl = await getDownloadURL(fileRef);
-      } catch (storageErr) {
-        console.debug('Firebase storage upload fallback:', storageErr?.message || storageErr);
+      // 2. Concurrently attempt Firebase Storage upload if configured
+      if (storage) {
+        try {
+          const fileRef = storageRef(storage, `chats/${requestId}/${Date.now()}_${file.name}`);
+          await uploadBytes(fileRef, file);
+          remoteStorageUrl = await getDownloadURL(fileRef);
+        } catch (storageErr) {
+          console.debug('Firebase storage upload fallback:', storageErr?.message || storageErr);
+        }
       }
+
+      const attachmentPayload = {
+        id: fileId,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl: uploadRes?.dataUrl || null,
+        blob: file
+      };
+
+      const newMsg = {
+        fileId: fileId,
+        fileUrl: remoteStorageUrl || uploadRes?.fileUrl || `/api/attachments/${fileId}`,
+        dataUrl: (uploadRes?.dataUrl && uploadRes.dataUrl.length < 500000) ? uploadRes.dataUrl : null,
+        filename: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        uid: userId,
+        sender: isAdmin ? 'admin' : 'client',
+        timestamp: Date.now(),
+        type: 'file'
+      };
+
+      await dispatchMessage(newMsg, attachmentPayload);
+    } catch (err) {
+      console.error('File process error:', err);
+    } finally {
+      setUploadStatus('');
     }
-
-    const newMsg = {
-      fileId: fileId,
-      fileUrl: remoteFileUrl,
-      dataUrl: (dataUrl && dataUrl.length < 500000) ? dataUrl : null,
-      filename: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-      uid: userId,
-      sender: isAdmin ? 'admin' : 'client',
-      timestamp: Date.now(),
-      type: 'file'
-    };
-
-    await dispatchMessage(newMsg, attachmentPayload);
   }
 
   // Re-bind click event cleanly
@@ -386,6 +442,15 @@ export function initChat(requestId, userId) {
       sendMessage();
     }
   };
+
+  // Bind attach button inside input bar
+  const attachBtn = messageInput.parentElement.querySelector('.chat-btn-attach');
+  if (attachBtn && fileInput) {
+    attachBtn.onclick = (e) => {
+      e.preventDefault();
+      fileInput.click();
+    };
+  }
 
   // Bind file input handler
   if (fileInput) {
@@ -437,3 +502,4 @@ export function initChat(requestId, userId) {
     }
   });
 }
+

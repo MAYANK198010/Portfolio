@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMasterAdmin() {
+      return isSignedIn() && (request.auth.token.email == 'admin@mayankzen.in' || request.auth.token.email == 'mayank198010@gmail.com');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'admin@mayankzen.in' ||
+        request.auth.token.email == 'mayank198010@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    // Service Requests
+    match /service_requests/{requestId} {
+      allow read: if true; // Allows clients to track by trackingId and admins to view
+      allow create: if true; // Allows prospective clients to submit briefs
+      allow update, delete: if isSignedIn() || isAdmin();
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isMasterAdmin();
+    }
+
+    // Approved Admins List
+    match /approvedAdmins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || isMasterAdmin();
+    }
+
+    // Chat Rooms and Messages
+    match /chat_rooms/{roomId} {
+      allow read, write: if true;
+
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+
+    // Default fallback
+    match /{document=**} {
+      allow read, write: if isSignedIn();
+    }
+  }
+}

@@ -144,8 +144,9 @@
 
   <!-- Tab Navigation -->
   <div class="admin-tabs">
-    <button class="admin-tab-btn active" onclick="switchAdminTab('requests')"><i class="fa-solid fa-list-check"></i> Project Requests</button>
-    <button class="admin-tab-btn" onclick="switchAdminTab('admins')"><i class="fa-solid fa-user-shield"></i> Approved Admins</button>
+    <button class="admin-tab-btn active" data-tab="requests" onclick="switchAdminTab('requests', event)"><i class="fa-solid fa-list-check"></i> Project Requests</button>
+    <button class="admin-tab-btn" data-tab="users" onclick="switchAdminTab('users', event)"><i class="fa-solid fa-users"></i> User Management</button>
+    <button class="admin-tab-btn" data-tab="admins" onclick="switchAdminTab('admins', event)"><i class="fa-solid fa-user-shield"></i> Admin Access</button>
   </div>
 
   <!-- Requests Tab Content -->
@@ -188,6 +189,35 @@
     </div>
   </div>
 
+  <!-- User Management Tab Content -->
+  <div id="usersTabContent" style="display: none;">
+    <div class="admin-toolbar">
+      <div class="admin-search">
+        <input type="text" id="userSearchInput" placeholder="Search users by name, email, role..." oninput="filterUsersTable()">
+      </div>
+      <button onclick="loadUsers()" class="btn secondary btn-sm"><i class="fa-solid fa-rotate"></i> Refresh Users</button>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>User / Name</th>
+            <th>Email Address</th>
+            <th>Role</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="usersTable">
+          <tr>
+            <td colspan="5" style="text-align: center; padding: 2rem;">Loading registered users...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- Admins Tab Content -->
   <div id="adminsTabContent" style="display: none;">
     <div class="card" style="max-width: 700px; margin: 0 auto; text-align: left;">
@@ -209,6 +239,48 @@
     </div>
   </div>
 </main>
+
+<!-- Edit Request Modal -->
+<div id="adminEditModal" class="modal-backdrop" onclick="if(event.target===this)closeAdminEditModal()">
+  <div class="modal-content" style="max-width: 550px;">
+    <button class="modal-close" onclick="closeAdminEditModal()">&times;</button>
+    <h2 style="color: var(--accent-green); margin-bottom: 1rem;"><i class="fa-solid fa-pen-to-square"></i> Update Project Request</h2>
+    <form id="editRequestForm" onsubmit="handleUpdateRequestSubmit(event)">
+      <input type="hidden" id="editReqDocId">
+      <div class="form-group" style="margin-bottom: 1rem; text-align: left;">
+        <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.35rem;">Tracking ID</label>
+        <input type="text" id="editReqTrackingId" readonly style="background: rgba(0,0,0,0.5); color: var(--accent-green); font-weight: bold;">
+      </div>
+      <div class="form-group" style="margin-bottom: 1rem; text-align: left;">
+        <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.35rem;">Client Service</label>
+        <select id="editReqService" style="background: rgba(0,0,0,0.5); color: white; border: 1px solid var(--primary-purple); border-radius: 8px; padding: 0.75rem; width: 100%;">
+          <option value="Web Development">Web Development</option>
+          <option value="AI & Automation">AI & Automation</option>
+          <option value="3D WebGL & Three.js">3D WebGL & Three.js</option>
+          <option value="Custom Software">Custom Software</option>
+          <option value="Researched Content">Researched Content</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom: 1rem; text-align: left;">
+        <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.35rem;">Budget (INR ₹)</label>
+        <input type="number" id="editReqBudget" min="0" style="background: rgba(0,0,0,0.5); color: white; border: 1px solid var(--primary-purple); border-radius: 8px; padding: 0.75rem; width: 100%;">
+      </div>
+      <div class="form-group" style="margin-bottom: 1.5rem; text-align: left;">
+        <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.35rem;">Project Status</label>
+        <select id="editReqStatus" style="background: rgba(0,0,0,0.5); color: white; border: 1px solid var(--primary-purple); border-radius: 8px; padding: 0.75rem; width: 100%;">
+          <option value="Pending">Pending</option>
+          <option value="Working">Working / In Progress</option>
+          <option value="Review">In Review</option>
+          <option value="Completed">Completed</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+        <button type="button" class="btn secondary btn-sm" onclick="closeAdminEditModal()">Cancel</button>
+        <button type="submit" class="btn primary btn-sm"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- Project Details Modal -->
 <div id="adminDetailModal" class="modal-backdrop" onclick="if(event.target===this)closeAdminDetailModal()">
@@ -243,8 +315,8 @@
     
     <div class="chat-input-bar">
       <input type="text" id="messageInput" class="chat-input-field" placeholder="Reply to client as MayankZen Studios (Enter to send)..." autocomplete="off">
-      <input type="file" id="fileInput" style="display: none;">
-      <button type="button" onclick="document.getElementById('fileInput').click()" class="chat-btn-icon chat-btn-attach" title="Attach deliverable file or zip">
+      <input type="file" id="fileInput" multiple style="display: none;">
+      <button type="button" class="chat-btn-icon chat-btn-attach" title="Attach deliverable file or zip">
         <i class="fa-solid fa-paperclip"></i>
       </button>
       <button type="button" id="sendBtn" class="chat-btn-icon chat-btn-send" title="Send reply">

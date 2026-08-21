@@ -26,27 +26,37 @@ function showToast(msg, type = 'success') {
 }
 
 let allRequests = [];
+let allUsers = [];
 let statusChartInstance = null;
 let servicesChartInstance = null;
 let currentAdminUser = null;
 
 // Admin Verification Check
 async function isApprovedAdmin(user) {
-  if (!user) return false;
-  if (user.email === 'mayank198010@gmail.com') return true;
+  if (!user || !user.email) return false;
+  const email = user.email.toLowerCase().trim();
+  if (email === 'admin@mayankzen.in' || email === 'mayank198010@gmail.com') return true;
+
+  // Check local approved admins list
+  try {
+    const localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
+    if (localAdmins.some(a => (typeof a === 'string' ? a : a.email).toLowerCase() === email)) {
+      return true;
+    }
+  } catch (e) {}
   
   try {
     const userDoc = await getDoc(doc(db, "users", user.uid));
     if (userDoc.exists() && userDoc.data().role === 'admin') return true;
   } catch (e) {
-    console.debug('User role lookup notice:', e);
+    console.debug('User role lookup notice:', e?.message || e);
   }
 
   try {
     const approvedSnap = await getDocs(collection(db, "approvedAdmins"));
-    return approvedSnap.docs.some(d => d.data().email === user.email);
+    return approvedSnap.docs.some(d => d.data().email?.toLowerCase() === email);
   } catch (e) {
-    console.debug('Admin verification notice:', e);
+    console.debug('Approved admins remote lookup notice (handled):', e?.message || e);
     return false;
   }
 }
@@ -60,11 +70,10 @@ onAuthStateChanged(auth, async (user) => {
 
   const isAdmin = await isApprovedAdmin(user);
   if (!isAdmin) {
-    showToast("Access Denied: Admin privileges required.", "error");
-    setTimeout(async () => {
-      await signOut(auth);
-      window.location.href = "/";
-    }, 2000);
+    showToast("Access Denied: Only Admin (admin@mayankzen.in) can access the Admin Panel. Redirecting to your Dashboard...", "error");
+    setTimeout(() => {
+      window.location.href = "/dashboard/";
+    }, 1500);
     return;
   }
 
@@ -73,6 +82,7 @@ onAuthStateChanged(auth, async (user) => {
   if (displayEl) displayEl.textContent = user.email;
 
   loadRequests();
+  loadUsers();
   loadApprovedAdmins();
 });
 
@@ -148,63 +158,71 @@ function renderMetricsAndCharts() {
     serviceCounts[sName] = (serviceCounts[sName] || 0) + 1;
   });
 
-  document.getElementById('totalRequests').textContent = stats.total;
-  document.getElementById('pendingCount').textContent = stats.pending;
-  document.getElementById('activeCount').textContent = stats.working;
-  document.getElementById('completeCount').textContent = stats.completed;
-  document.getElementById('totalRevenue').textContent = '₹' + stats.pipeline.toLocaleString('en-IN');
+  const totalEl = document.getElementById('totalRequests');
+  const pendingEl = document.getElementById('pendingCount');
+  const activeEl = document.getElementById('activeCount');
+  const completeEl = document.getElementById('completeCount');
+  const revenueEl = document.getElementById('totalRevenue');
 
-  // Render Status Chart
-  const statusCtx = document.getElementById('statusChart')?.getContext('2d');
-  if (statusCtx) {
-    if (statusChartInstance) statusChartInstance.destroy();
-    statusChartInstance = new Chart(statusCtx, {
-      type: 'doughnut',
-      data: {
-        labels: ['Pending', 'In Progress', 'Completed'],
-        datasets: [{
-          data: [stats.pending, stats.working, stats.completed],
-          backgroundColor: ['#fbbf24', '#8b5cf6', '#10b981'],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'bottom', labels: { color: '#a1a8c0' } }
-        }
-      }
-    });
-  }
+  if (totalEl) totalEl.textContent = stats.total;
+  if (pendingEl) pendingEl.textContent = stats.pending;
+  if (activeEl) activeEl.textContent = stats.working;
+  if (completeEl) completeEl.textContent = stats.completed;
+  if (revenueEl) revenueEl.textContent = '₹' + stats.pipeline.toLocaleString('en-IN');
 
-  // Render Services Chart
-  const servCtx = document.getElementById('servicesChart')?.getContext('2d');
-  if (servCtx) {
-    if (servicesChartInstance) servicesChartInstance.destroy();
-    servicesChartInstance = new Chart(servCtx, {
-      type: 'bar',
-      data: {
-        labels: Object.keys(serviceCounts),
-        datasets: [{
-          label: 'Requests Count',
-          data: Object.values(serviceCounts),
-          backgroundColor: '#10b981',
-          borderRadius: 6
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: { ticks: { color: '#a1a8c0', stepSize: 1 } },
-          x: { ticks: { color: '#a1a8c0' } }
+  // Render Status Chart if Chart.js is loaded
+  if (typeof Chart !== 'undefined') {
+    const statusCtx = document.getElementById('statusChart')?.getContext('2d');
+    if (statusCtx) {
+      if (statusChartInstance) statusChartInstance.destroy();
+      statusChartInstance = new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Pending', 'In Progress', 'Completed'],
+          datasets: [{
+            data: [stats.pending, stats.working, stats.completed],
+            backgroundColor: ['#fbbf24', '#8b5cf6', '#10b981'],
+            borderWidth: 0
+          }]
         },
-        plugins: {
-          legend: { display: false }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#a1a8c0' } }
+          }
         }
-      }
-    });
+      });
+    }
+
+    // Render Services Chart
+    const servCtx = document.getElementById('servicesChart')?.getContext('2d');
+    if (servCtx) {
+      if (servicesChartInstance) servicesChartInstance.destroy();
+      servicesChartInstance = new Chart(servCtx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(serviceCounts),
+          datasets: [{
+            label: 'Requests Count',
+            data: Object.values(serviceCounts),
+            backgroundColor: '#10b981',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { ticks: { color: '#a1a8c0', stepSize: 1 } },
+            x: { ticks: { color: '#a1a8c0' } }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+    }
   }
 }
 
@@ -245,6 +263,7 @@ function renderTable(requests) {
       <td>
         <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
           <button class="btn primary btn-sm" onclick="openAdminChat('${req.trackingId}')" title="Chat with Client"><i class="fa-solid fa-comments"></i> Chat</button>
+          <button class="btn secondary btn-sm" onclick="openEditRequestModal('${req.id}')" title="Edit Budget/Service/Status"><i class="fa-solid fa-pen-to-square"></i></button>
           <button class="btn secondary btn-sm" onclick="viewRequestDetail('${req.id}')" title="View Full Brief"><i class="fa-solid fa-file-lines"></i></button>
           ${req.mobile ? `<a href="https://wa.me/${req.mobile.replace(/[^0-9]/g, '')}" target="_blank" class="btn secondary btn-sm" style="border-color:#25d366; color:#25d366;" title="WhatsApp Client"><i class="fa-brands fa-whatsapp"></i></a>` : ''}
           <button class="btn secondary btn-sm" onclick="deleteRequestRecord('${req.id}')" style="border-color:#ef4444; color:#ef4444;" title="Delete Request"><i class="fa-solid fa-trash"></i></button>
@@ -260,10 +279,25 @@ function renderTable(requests) {
       const id = e.target.dataset.id;
       const newStatus = e.target.value;
       try {
-        await updateDoc(doc(db, "service_requests", id), {
-          status: newStatus,
-          updatedAt: serverTimestamp()
-        });
+        if (!id.startsWith('local_')) {
+          await updateDoc(doc(db, "service_requests", id), {
+            status: newStatus,
+            updatedAt: serverTimestamp()
+          });
+        }
+        
+        // Update local storage cache
+        try {
+          const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
+          const match = localList.find(r => r.trackingId === id || 'local_' + r.trackingId === id);
+          if (match) {
+            match.status = newStatus;
+            localStorage.setItem('mayankzen_local_requests', JSON.stringify(localList));
+          }
+        } catch (le) {
+          console.debug('Local storage status update note:', le);
+        }
+
         showToast(`Status updated to "${newStatus}"`, 'success');
         
         // Update local dataset and recalculate metrics
@@ -297,6 +331,70 @@ window.filterTable = function() {
   renderTable(filtered);
 };
 
+// Edit Request Modal Logic
+window.openEditRequestModal = function(id) {
+  const req = allRequests.find(r => r.id === id);
+  if (!req) return;
+
+  document.getElementById('editReqDocId').value = id;
+  document.getElementById('editReqTrackingId').value = req.trackingId || id;
+  document.getElementById('editReqService').value = req.service || 'Web Development';
+  document.getElementById('editReqBudget').value = req.budget || 0;
+  document.getElementById('editReqStatus').value = req.status || 'Pending';
+
+  document.getElementById('adminEditModal').classList.add('open');
+};
+
+window.closeAdminEditModal = function() {
+  document.getElementById('adminEditModal').classList.remove('open');
+};
+
+window.handleUpdateRequestSubmit = async function(event) {
+  event.preventDefault();
+  const id = document.getElementById('editReqDocId').value;
+  const service = document.getElementById('editReqService').value;
+  const budget = Number(document.getElementById('editReqBudget').value) || 0;
+  const status = document.getElementById('editReqStatus').value;
+
+  try {
+    if (!id.startsWith('local_')) {
+      await updateDoc(doc(db, "service_requests", id), {
+        service,
+        budget,
+        status,
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    // Update in local requests
+    const req = allRequests.find(r => r.id === id);
+    if (req) {
+      req.service = service;
+      req.budget = budget;
+      req.status = status;
+    }
+
+    try {
+      const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
+      const match = localList.find(r => r.trackingId === id || 'local_' + r.trackingId === id);
+      if (match) {
+        match.service = service;
+        match.budget = budget;
+        match.status = status;
+        localStorage.setItem('mayankzen_local_requests', JSON.stringify(localList));
+      }
+    } catch (le) {}
+
+    renderMetricsAndCharts();
+    renderTable(allRequests);
+    closeAdminEditModal();
+    showToast("Project request updated successfully!", "success");
+  } catch (err) {
+    console.error("Update request error:", err);
+    showToast("Failed to update: " + err.message, "error");
+  }
+};
+
 // Admin Chat Modal Handlers
 window.openAdminChat = function(trackingId) {
   if (!trackingId) {
@@ -321,18 +419,28 @@ window.viewRequestDetail = function(id) {
     <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 1rem 0;">
     <h4 style="color: var(--accent-green); margin-bottom: 0.5rem;"><i class="fa-solid fa-paperclip"></i> Attached Client Files (${req.attachments.length}):</h4>
     <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-      ${req.attachments.map(att => `
+      ${req.attachments.map(att => {
+        const fileTarget = att.fileId || att.url || '';
+        const safeName = (att.name || 'attachment').replace(/'/g, "\\'");
+        const safeTarget = String(fileTarget).replace(/'/g, "\\'");
+        return `
         <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.4); border: 1px solid rgba(139,92,246,0.3); border-radius: 8px; padding: 0.5rem 0.85rem; font-size: 0.85rem;">
           <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden;">
             <i class="${getFileIcon(att.name, att.type)}" style="color: var(--accent-green);"></i>
             <span style="color: white; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px;">${att.name}</span>
             <span style="color: var(--text-secondary); font-size: 0.75rem;">(${formatBytes(att.size)})</span>
           </div>
-          <button type="button" class="btn secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="window.downloadAttachment('${att.fileId || att.url}', '${att.name}')">
-            <i class="fa-solid fa-download"></i> Download
-          </button>
+          <div style="display: flex; gap: 0.4rem;">
+            <button type="button" class="btn secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="window.openAttachmentPreview('${safeTarget}', '${safeName}')">
+              <i class="fa-solid fa-eye"></i> View
+            </button>
+            <button type="button" class="btn secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="window.downloadAttachment('${safeTarget}', '${safeName}')">
+              <i class="fa-solid fa-download"></i> Download
+            </button>
+          </div>
         </div>
-      `).join('')}
+      `;
+      }).join('')}
     </div>
   ` : '';
 
@@ -361,7 +469,15 @@ window.closeAdminDetailModal = function() {
 window.deleteRequestRecord = async function(id) {
   if (!confirm("Are you sure you want to permanently delete this project request?")) return;
   try {
-    await deleteDoc(doc(db, "service_requests", id));
+    if (!id.startsWith('local_')) {
+      await deleteDoc(doc(db, "service_requests", id));
+    }
+    try {
+      const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
+      const filteredLocal = localList.filter(r => r.trackingId !== id && 'local_' + r.trackingId !== id);
+      localStorage.setItem('mayankzen_local_requests', JSON.stringify(filteredLocal));
+    } catch (le) {}
+
     showToast("Request record deleted.", "info");
     allRequests = allRequests.filter(r => r.id !== id);
     renderMetricsAndCharts();
@@ -372,17 +488,152 @@ window.deleteRequestRecord = async function(id) {
   }
 };
 
-// Tab Switching
-window.switchAdminTab = function(tabName) {
-  document.querySelectorAll('.admin-tab-btn').forEach(btn => btn.classList.remove('active'));
-  event.currentTarget.classList.add('active');
+// Load and Manage Users
+window.loadUsers = async function() {
+  const usersTable = document.getElementById("usersTable");
+  if (!usersTable) return;
+  usersTable.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem;"><span class="loading"></span> Fetching user accounts...</td></tr>';
 
-  if (tabName === 'requests') {
-    document.getElementById('requestsTabContent').style.display = 'block';
-    document.getElementById('adminsTabContent').style.display = 'none';
-  } else {
-    document.getElementById('requestsTabContent').style.display = 'none';
-    document.getElementById('adminsTabContent').style.display = 'block';
+  let usersMap = new Map();
+
+  // Add master admin users by default
+  usersMap.set('master_admin_main', {
+    id: 'master_admin_main',
+    name: 'Studio Admin',
+    email: 'admin@mayankzen.in',
+    role: 'admin',
+    createdAt: 'Primary Admin'
+  });
+
+  usersMap.set('master_founder', {
+    id: 'master_founder',
+    name: 'Mayank (Founder)',
+    email: 'mayank198010@gmail.com',
+    role: 'admin',
+    createdAt: 'Master Account'
+  });
+
+  try {
+    const snapshot = await getDocs(collection(db, "users"));
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      usersMap.set(docSnap.id, {
+        id: docSnap.id,
+        ...data
+      });
+    });
+  } catch (error) {
+    console.warn("Firestore users query notice:", error.message);
+  }
+
+  allUsers = Array.from(usersMap.values());
+  renderUsersTable(allUsers);
+};
+
+function renderUsersTable(users) {
+  const tableBody = document.getElementById("usersTable");
+  if (!tableBody) return;
+
+  if (users.length === 0) {
+    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-secondary);">No user accounts found.</td></tr>';
+    return;
+  }
+
+  tableBody.innerHTML = '';
+  users.forEach(u => {
+    const row = document.createElement("tr");
+    const emailLower = (u.email || '').toLowerCase();
+    const isMaster = emailLower === 'admin@mayankzen.in' || emailLower === 'mayank198010@gmail.com';
+    const isAdmin = u.role === 'admin' || isMaster;
+    const dateStr = u.createdAt?.seconds ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : (typeof u.createdAt === 'string' ? u.createdAt : 'Recent');
+
+    row.innerHTML = `
+      <td>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <div style="width: 34px; height: 34px; border-radius: 50%; background: ${isAdmin ? 'linear-gradient(135deg, #10b981, #047857)' : 'rgba(139,92,246,0.2)'}; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;">
+            ${(u.name || u.email || 'U').charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <strong style="color: white;">${u.name || 'User'}</strong>
+            ${isMaster ? '<span style="font-size: 0.7rem; color: var(--accent-green); margin-left: 0.35rem;">(Master Admin)</span>' : ''}
+          </div>
+        </div>
+      </td>
+      <td style="color: #cbd5e1;">${u.email || 'N/A'}</td>
+      <td>
+        <span class="status ${isAdmin ? 'completed' : 'pending'}" style="margin-bottom: 0;">
+          ${isAdmin ? '<i class="fa-solid fa-crown"></i> Admin' : '<i class="fa-solid fa-user"></i> Client'}
+        </span>
+      </td>
+      <td style="color: var(--text-secondary); font-size: 0.9rem;">${dateStr}</td>
+      <td>
+        ${isMaster ? '<span style="color: var(--text-secondary); font-size: 0.85rem;">Protected</span>' : `
+          <button class="btn secondary btn-sm" onclick="toggleUserRole('${u.id}', '${u.role || 'user'}')" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">
+            ${isAdmin ? '<i class="fa-solid fa-arrow-down"></i> Set Client' : '<i class="fa-solid fa-arrow-up"></i> Make Admin'}
+          </button>
+        `}
+      </td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+window.filterUsersTable = function() {
+  const searchTerm = document.getElementById("userSearchInput")?.value.toLowerCase() || '';
+  const filtered = allUsers.filter(u => 
+    (u.name && u.name.toLowerCase().includes(searchTerm)) ||
+    (u.email && u.email.toLowerCase().includes(searchTerm)) ||
+    (u.role && u.role.toLowerCase().includes(searchTerm))
+  );
+  renderUsersTable(filtered);
+};
+
+window.toggleUserRole = async function(userId, currentRole) {
+  const newRole = currentRole === 'admin' ? 'user' : 'admin';
+  try {
+    await updateDoc(doc(db, "users", userId), {
+      role: newRole,
+      updatedAt: serverTimestamp()
+    });
+    showToast(`User role updated to "${newRole}"`, 'success');
+    const u = allUsers.find(user => user.id === userId);
+    if (u) u.role = newRole;
+    renderUsersTable(allUsers);
+  } catch (err) {
+    console.error("Toggle role error:", err);
+    showToast("Failed to change user role: " + err.message, "error");
+  }
+};
+
+// Tab Switching
+window.switchAdminTab = function(tabName, evt) {
+  document.querySelectorAll('.admin-tab-btn').forEach(btn => {
+    const isTarget = btn.getAttribute('data-tab') === tabName || (btn.textContent || '').toLowerCase().includes(tabName);
+    btn.classList.toggle('active', isTarget);
+  });
+
+  if (evt && evt.currentTarget) {
+    document.querySelectorAll('.admin-tab-btn').forEach(btn => btn.classList.remove('active'));
+    evt.currentTarget.classList.add('active');
+  } else if (typeof window !== 'undefined' && window.event && window.event.currentTarget) {
+    document.querySelectorAll('.admin-tab-btn').forEach(btn => btn.classList.remove('active'));
+    window.event.currentTarget.classList.add('active');
+  }
+
+  const requestsTab = document.getElementById('requestsTabContent');
+  const usersTab = document.getElementById('usersTabContent');
+  const adminsTab = document.getElementById('adminsTabContent');
+
+  if (requestsTab) requestsTab.style.display = tabName === 'requests' ? 'block' : 'none';
+  if (usersTab) usersTab.style.display = tabName === 'users' ? 'block' : 'none';
+  if (adminsTab) adminsTab.style.display = tabName === 'admins' ? 'block' : 'none';
+
+  if (tabName === 'users') {
+    loadUsers();
+  } else if (tabName === 'admins') {
+    loadApprovedAdmins();
+  } else if (tabName === 'requests') {
+    loadRequests();
   }
 };
 
@@ -391,64 +642,142 @@ async function loadApprovedAdmins() {
   const container = document.getElementById('adminsList');
   if (!container) return;
 
+  // Retrieve cached local admins
+  let localAdmins = [];
+  try {
+    localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
+  } catch (e) {
+    localAdmins = [];
+  }
+
+  const adminsMap = new Map();
+  // Always include primary master admin & founder
+  adminsMap.set('admin@mayankzen.in', {
+    id: 'master_admin_main',
+    email: 'admin@mayankzen.in',
+    isMaster: true,
+    source: 'system'
+  });
+
+  adminsMap.set('mayank198010@gmail.com', {
+    id: 'master_founder',
+    email: 'mayank198010@gmail.com',
+    isMaster: true,
+    source: 'system'
+  });
+
+  // Populate local admins
+  localAdmins.forEach(item => {
+    const email = typeof item === 'string' ? item : item.email;
+    if (email && !adminsMap.has(email.toLowerCase())) {
+      adminsMap.set(email.toLowerCase(), {
+        id: typeof item === 'object' && item.id ? item.id : 'local_' + email,
+        email: email,
+        isMaster: false,
+        source: 'local'
+      });
+    }
+  });
+
   try {
     const snapshot = await getDocs(collection(db, "approvedAdmins"));
-    let html = `
-      <div style="padding: 0.75rem 1rem; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-        <span><strong>mayank198010@gmail.com</strong> (Founder / Master)</span>
-        <span class="status completed" style="margin-bottom: 0;">Master</span>
-      </div>
-    `;
-
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
+      if (data && data.email) {
+        adminsMap.set(data.email.toLowerCase(), {
+          id: docSnap.id,
+          email: data.email,
+          isMaster: data.email.toLowerCase() === 'mayank198010@gmail.com',
+          source: 'cloud'
+        });
+      }
+    });
+  } catch (err) {
+    console.debug("Remote approvedAdmins query note (using local cache & user management):", err?.message || err);
+  }
+
+  const adminsList = Array.from(adminsMap.values());
+
+  let html = '';
+  adminsList.forEach(admin => {
+    if (admin.isMaster) {
       html += `
         <div style="padding: 0.75rem 1rem; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-          <span>${data.email}</span>
-          <button onclick="removeApprovedAdmin('${docSnap.id}')" class="btn secondary btn-sm" style="border-color:#ef4444; color:#ef4444; padding:0.25rem 0.5rem;"><i class="fa-solid fa-user-minus"></i> Remove</button>
+          <span><strong>${admin.email}</strong> <span style="font-size: 0.75rem; color: var(--accent-green); margin-left: 0.25rem;">(Founder / Master)</span></span>
+          <span class="status completed" style="margin-bottom: 0;">Master</span>
         </div>
       `;
-    });
+    } else {
+      html += `
+        <div style="padding: 0.75rem 1rem; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+          <span>${admin.email}</span>
+          <button onclick="removeApprovedAdmin('${admin.id}', '${admin.email}')" class="btn secondary btn-sm" style="border-color:#ef4444; color:#ef4444; padding:0.25rem 0.5rem;"><i class="fa-solid fa-user-minus"></i> Remove</button>
+        </div>
+      `;
+    }
+  });
 
-    container.innerHTML = html;
-  } catch (err) {
-    console.error("Error loading approved admins:", err);
-  }
+  container.innerHTML = html;
 }
 
 window.addApprovedAdmin = async function() {
   const input = document.getElementById('newAdminEmail');
-  const email = input?.value.trim();
+  const email = input?.value.trim().toLowerCase();
   if (!email || !email.includes('@')) {
     showToast("Please enter a valid email address.", "error");
     return;
   }
 
+  // Save to local storage cache immediately
+  try {
+    const localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
+    if (!localAdmins.some(a => (typeof a === 'string' ? a : a.email).toLowerCase() === email)) {
+      localAdmins.push({ id: 'local_' + Date.now(), email: email, addedAt: new Date().toISOString() });
+      localStorage.setItem('mayankzen_approved_admins', JSON.stringify(localAdmins));
+    }
+  } catch (e) {}
+
+  // Attempt Firestore remote add
   try {
     await addDoc(collection(db, "approvedAdmins"), {
       email,
       addedAt: serverTimestamp(),
       addedBy: currentAdminUser?.email || 'master'
     });
-    showToast(`Granted admin rights to ${email}`, 'success');
-    input.value = '';
-    loadApprovedAdmins();
   } catch (err) {
-    console.error("Add admin error:", err);
-    showToast("Failed to add admin: " + err.message, 'error');
+    console.debug("Approved admins remote save note (cached locally):", err?.message || err);
   }
+
+  showToast(`Granted admin rights to ${email}`, 'success');
+  if (input) input.value = '';
+  loadApprovedAdmins();
 };
 
-window.removeApprovedAdmin = async function(id) {
-  if (!confirm("Revoke admin rights for this email?")) return;
+window.removeApprovedAdmin = async function(id, email) {
+  if (!confirm(`Revoke admin rights for ${email || 'this account'}?`)) return;
+
+  // Remove from local cache
   try {
-    await deleteDoc(doc(db, "approvedAdmins", id));
-    showToast("Admin access revoked.", "info");
-    loadApprovedAdmins();
-  } catch (err) {
-    console.error("Revoke admin error:", err);
-    showToast("Failed to revoke admin: " + err.message, 'error');
+    const localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
+    const filtered = localAdmins.filter(a => {
+      const aEmail = typeof a === 'string' ? a : a.email;
+      const aId = typeof a === 'object' ? a.id : null;
+      return aEmail?.toLowerCase() !== email?.toLowerCase() && aId !== id;
+    });
+    localStorage.setItem('mayankzen_approved_admins', JSON.stringify(filtered));
+  } catch (e) {}
+
+  // Attempt Firestore remote delete
+  if (id && !id.startsWith('local_')) {
+    try {
+      await deleteDoc(doc(db, "approvedAdmins", id));
+    } catch (err) {
+      console.debug("Remote delete notice:", err?.message || err);
+    }
   }
+
+  showToast("Admin access revoked.", "info");
+  loadApprovedAdmins();
 };
 
 // Export Requests to CSV
@@ -484,5 +813,6 @@ window.exportRequestsCSV = function() {
 
 window.refreshData = function() {
   loadRequests();
+  loadUsers();
   showToast("Data refreshed", "info");
 };

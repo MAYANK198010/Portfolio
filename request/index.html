@@ -209,8 +209,8 @@
 
     <div class="chat-input-bar">
       <input type="text" id="messageInput" class="chat-input-field" placeholder="Type message to MayankZen Studios (Enter to send)..." autocomplete="off">
-      <input type="file" id="fileInput" style="display: none;">
-      <button type="button" onclick="document.getElementById('fileInput').click()" class="chat-btn-icon chat-btn-attach" title="Attach file or screenshot">
+      <input type="file" id="fileInput" multiple style="display: none;">
+      <button type="button" class="chat-btn-icon chat-btn-attach" title="Attach file or screenshot">
         <i class="fa-solid fa-paperclip"></i>
       </button>
       <button type="button" id="sendBtn" class="chat-btn-icon chat-btn-send" title="Send message">
@@ -228,7 +228,7 @@
 <script type="module">
   import { initChat } from '../chat.js';
   import { auth, db, storage } from '../firebase.js';
-  import { storeAttachment, fileToDataUrl, formatBytes, getFileIcon } from '../attachments.js';
+  import { storeAttachment, fileToDataUrl, formatBytes, getFileIcon, uploadAttachmentToServer } from '../attachments.js';
   import { onAuthStateChanged, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
   import { ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
@@ -386,24 +386,9 @@
 
       for (const f of attachedFiles) {
         const fileId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        let dataUrl = null;
-        try {
-          dataUrl = await fileToDataUrl(f);
-        } catch (e) {
-          console.warn('DataURL generation note:', e);
-        }
+        const uploadRes = await uploadAttachmentToServer(f, fileId);
 
-        // Store attachment locally in IndexedDB
-        await storeAttachment(fileId, {
-          id: fileId,
-          name: f.name,
-          type: f.type,
-          size: f.size,
-          dataUrl: dataUrl,
-          blob: f
-        });
-
-        // Attempt remote upload if storage available
+        // Attempt remote upload if Firebase storage available
         let remoteUrl = null;
         if (storage) {
           try {
@@ -415,20 +400,22 @@
           }
         }
 
+        const effectiveUrl = remoteUrl || uploadRes?.fileUrl || `/api/attachments/${fileId}`;
+
         const attMeta = {
           fileId,
           name: f.name,
           type: f.type,
           size: f.size,
-          url: remoteUrl || dataUrl
+          url: effectiveUrl
         };
         processedAttachments.push(attMeta);
 
         // Prepare seed chat message for this attachment
         chatSeedMessages.push({
           fileId: fileId,
-          fileUrl: remoteUrl,
-          dataUrl: (dataUrl && dataUrl.length < 500000) ? dataUrl : null,
+          fileUrl: effectiveUrl,
+          dataUrl: (uploadRes?.dataUrl && uploadRes.dataUrl.length < 500000) ? uploadRes.dataUrl : null,
           filename: f.name,
           fileType: f.type,
           fileSize: f.size,

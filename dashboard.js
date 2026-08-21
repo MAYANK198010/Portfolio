@@ -21,7 +21,8 @@ onAuthStateChanged(auth, async (user) => {
   if (emailEl) emailEl.textContent = user.email || 'No email';
   
   let displayName = user.displayName || user.email?.split('@')[0] || 'Client';
-  let isUserAdmin = user.email === 'mayank198010@gmail.com';
+  const emailLower = (user.email || '').toLowerCase().trim();
+  let isUserAdmin = emailLower === 'admin@mayankzen.in' || emailLower === 'mayank198010@gmail.com';
 
   try {
     const userSnap = await getDoc(doc(db, "users", user.uid));
@@ -37,7 +38,7 @@ onAuthStateChanged(auth, async (user) => {
   if (!isUserAdmin && user.email) {
     try {
       const approvedSnap = await getDocs(collection(db, "approvedAdmins"));
-      if (approvedSnap.docs.some(d => d.data().email === user.email)) {
+      if (approvedSnap.docs.some(d => d.data().email?.toLowerCase() === emailLower)) {
         isUserAdmin = true;
       }
     } catch (err) {

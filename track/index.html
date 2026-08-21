@@ -144,8 +144,8 @@
 
       <div class="chat-input-bar">
         <input type="text" id="messageInput" class="chat-input-field" placeholder="Message MayankZen Studios (Enter to send)..." autocomplete="off">
-        <input type="file" id="fileInput" style="display: none;">
-        <button type="button" onclick="document.getElementById('fileInput').click()" class="chat-btn-icon chat-btn-attach" title="Attach file or document">
+        <input type="file" id="fileInput" multiple style="display: none;">
+        <button type="button" class="chat-btn-icon chat-btn-attach" title="Attach file or document">
           <i class="fa-solid fa-paperclip"></i>
         </button>
         <button type="button" id="sendBtn" class="chat-btn-icon chat-btn-send" title="Send message">
@@ -262,7 +262,11 @@
             <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.85rem;">
               <h5 style="color: var(--accent-green); font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-paperclip"></i> Attached Project Files (${data.attachments.length}):</h5>
               <div style="display: flex; flex-direction: column; gap: 0.5rem;">
-                ${data.attachments.map(att => `
+                ${data.attachments.map(att => {
+                  const fileTarget = att.fileId || att.url || '';
+                  const safeName = (att.name || 'attachment').replace(/'/g, "\\'");
+                  const safeTarget = String(fileTarget).replace(/'/g, "\\'");
+                  return `
                   <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(15,23,42,0.8); border: 1px solid rgba(139,92,246,0.3); border-radius: 8px; padding: 0.5rem 0.85rem; font-size: 0.85rem;">
                     <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden;">
                       <i class="${getFileIcon(att.name, att.type)}" style="color: var(--accent-green);"></i>
@@ -270,12 +274,16 @@
                       <span style="color: var(--text-secondary); font-size: 0.75rem;">(${formatBytes(att.size)})</span>
                     </div>
                     <div style="display: flex; gap: 0.4rem;">
-                      <button type="button" class="btn secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="window.downloadAttachment('${att.fileId || att.url}', '${att.name}')">
+                      <button type="button" class="btn secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="window.openAttachmentPreview('${safeTarget}', '${safeName}')">
+                        <i class="fa-solid fa-eye"></i> View
+                      </button>
+                      <button type="button" class="btn secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="window.downloadAttachment('${safeTarget}', '${safeName}')">
                         <i class="fa-solid fa-download"></i> Download
                       </button>
                     </div>
                   </div>
-                `).join('')}
+                `;
+                }).join('')}
               </div>
             </div>
           ` : ''}
@@ -285,7 +293,7 @@
           <a href="https://wa.me/919968198010?text=Hi%20Mayank,%20checking%20status%20for%20tracking%20ID:%20${data.trackingId}" target="_blank" rel="noopener noreferrer" class="btn secondary btn-sm" style="border-color: #25d366; color: #25d366;">
             <i class="fa-brands fa-whatsapp"></i> Chat with Mayank on WhatsApp
           </a>
-          <button class="btn secondary btn-sm" onclick="navigator.clipboard.writeText(window.location.href); alert('Tracking link copied!');"><i class="fa-solid fa-share-nodes"></i> Share Tracker Link</button>
+          <button class="btn secondary btn-sm" onclick="navigator.clipboard.writeText(window.location.href).then(() => { if (typeof window.showToast === 'function') { window.showToast('Tracking link copied to clipboard!', 'success'); } else { const toast = document.createElement('div'); toast.className = 'toast success'; toast.innerHTML = '<i class=\'fa-solid fa-check-circle\'></i> <span>Tracking link copied to clipboard!</span>'; document.getElementById('toast-container')?.appendChild(toast); setTimeout(() => toast.remove(), 3000); } });"><i class="fa-solid fa-share-nodes"></i> Share Tracker Link</button>
         </div>
       </div>
     `;
