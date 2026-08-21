@@ -1,0 +1,6 @@
+{
+  "name": "MayankZen Studios",
+  "description": "Portfolio and digital services platform for MayankZen Studios with 3D hero scene, service requests, tracking, and admin monitoring dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

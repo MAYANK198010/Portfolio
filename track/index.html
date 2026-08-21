@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" prefix="og: https://ogp.me/ns#">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track Project Status | MayankZen Studios</title>
+  <meta name="title" content="Track Project Status | MayankZen Studios">
+  <meta name="description" content="Track your active project status, view milestones, and communicate in real-time with MayankZen Studios using your tracking ID.">
+  <meta name="keywords" content="Track Request, Project Status, Client Portal, MayankZen Studios">
+  <meta name="author" content="Mayank Kumar">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mayankzen.in/track/">
+  <meta name="theme-color" content="#0a0e17">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mayankzen.in/track/">
+  <meta property="og:title" content="Track Project Status | MayankZen Studios">
+  <meta property="og:description" content="Real-time project telemetry, development milestones, and live communication with MayankZen Studios.">
+  <meta property="og:image" content="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop">
+  <meta property="og:site_name" content="MayankZen Studios">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:url" content="https://mayankzen.in/track/">
+  <meta name="twitter:title" content="Track Project Status | MayankZen Studios">
+  <meta name="twitter:description" content="Real-time project telemetry, development milestones, and live communication with MayankZen Studios.">
+  <meta name="twitter:image" content="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop">
+
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+
+  <!-- Favicon & Site Icons -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- JSON-LD Breadcrumb Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": "https://mayankzen.in/"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "Track Project",
+            "item": "https://mayankzen.in/track/"
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- ===== NAVBAR ===== -->
+<header class="navbar">
+  <div class="logo">
+    <a href="/" class="logo-brand">
+      <img src="/logo-icon.svg" alt="MayankZen Studios Emblem" class="brand-logo-img" width="40" height="40">
+      <span class="brand-text">MayankZen <span class="brand-sub">Studio</span></span>
+    </a>
+  </div>
+  <nav>
+    <ul id="navMenu">
+      <li><a href="/">Home</a></li>
+      <li><a href="/#about">About</a></li>
+      <li><a href="/#services">Services</a></li>
+      <li><a href="/#portfolio">Projects</a></li>
+      <li><a href="/request/">Request</a></li>
+      <li><a href="/track/" style="color: var(--accent-green); font-weight: bold;">Track</a></li>
+      <li><a href="/login/" class="auth-link">Login</a></li>
+      <li><a href="/register/" class="auth-link">Register</a></li>
+    </ul>
+  </nav>
+  <button class="menu-toggle" id="menuBtn" aria-label="Toggle navigation menu">☰</button>
+</header>
+
+<main class="track-section" style="margin-top: 130px; margin-bottom: 5rem; padding: 2rem 1rem;">
+  <div class="track-card" style="max-width: 850px; margin: 0 auto; text-align: left;">
+    <div style="text-align: center; margin-bottom: 2rem;">
+      <div style="display: inline-block; padding: 0.35rem 0.9rem; border-radius: 50px; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.4); color: var(--primary-purple); font-size: 0.85rem; margin-bottom: 1rem; font-weight: 600;">
+        <i class="fa-solid fa-radar"></i> Real-time Project Telemetry
+      </div>
+      <h1 style="color: var(--primary-purple); font-size: 2.2rem; margin-bottom: 0.5rem;">Track Service Request</h1>
+      <p style="color: var(--text-secondary);">Enter your Tracking ID to view real-time progress, milestones, and direct chat.</p>
+    </div>
+
+    <form id="trackForm" class="track-form" style="margin-bottom: 2rem;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem;">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="trackId"><i class="fa-solid fa-hashtag"></i> Tracking ID *</label>
+          <input type="text" id="trackId" placeholder="e.g. MS-12345 or 12345" required autocomplete="off">
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="trackEmail"><i class="fa-solid fa-envelope"></i> Email (Optional)</label>
+          <input type="email" id="trackEmail" placeholder="client@example.com" autocomplete="off">
+        </div>
+      </div>
+      <button type="submit" id="trackBtn" class="btn primary" style="width: 100%; border: none; cursor: pointer; margin-top: 1.25rem; padding: 1rem; font-size: 1rem;">
+        <i class="fa-solid fa-magnifying-glass"></i> Check Project Status
+      </button>
+    </form>
+
+    <div id="trackResult"></div>
+
+    <!-- Integrated Chat Box for Tracked Request -->
+    <div id="trackChatSection" class="chat-container" style="display: none; margin-top: 2.5rem;">
+      <div class="chat-header">
+        <div class="chat-header-info">
+          <div class="chat-avatar-status">
+            <i class="fa-solid fa-comments"></i>
+            <span class="chat-online-dot"></span>
+          </div>
+          <div class="chat-header-titles">
+            <h3>Direct Project Chat</h3>
+            <p>Live communication with MayankZen engineering</p>
+          </div>
+        </div>
+        <div class="chat-header-actions">
+          <span id="trackChatStatus" class="status working" style="margin-bottom: 0;"><i class="fa-solid fa-circle" style="font-size: 0.6rem; margin-right: 4px; color: var(--accent-green);"></i> Live Connected</span>
+        </div>
+      </div>
+
+      <div id="chatMessages" class="messages"></div>
+
+      <div class="chat-input-bar">
+        <input type="text" id="messageInput" class="chat-input-field" placeholder="Message MayankZen Studios (Enter to send)..." autocomplete="off">
+        <input type="file" id="fileInput" style="display: none;">
+        <button type="button" onclick="document.getElementById('fileInput').click()" class="chat-btn-icon chat-btn-attach" title="Attach file or document">
+          <i class="fa-solid fa-paperclip"></i>
+        </button>
+        <button type="button" id="sendBtn" class="chat-btn-icon chat-btn-send" title="Send message">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p>© 2026 MayankZen Studios | Building Digital Worlds. All rights reserved.</p>
+</footer>
+
+<script type="module" src="../script.js"></script>
+<script type="module">
+  import { db, auth } from '../firebase.js';
+  import { initChat } from '../chat.js';
+  import { downloadAttachment, openAttachmentPreview, formatBytes, getFileIcon } from '../attachments.js';
+  import { collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { onAuthStateChanged, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+
+  const form = document.getElementById('trackForm');
+  const resultDiv = document.getElementById('trackResult');
+  const chatSection = document.getElementById('trackChatSection');
+
+  // Normalize user tracking ID input
+  function normalizeTrackingId(input) {
+    if (!input) return '';
+    let raw = input.trim().toUpperCase();
+    if (raw.startsWith('MS-')) return raw;
+    if (raw.startsWith('MS') && raw.length > 2 && raw[2] !== '-') {
+      return 'MS-' + raw.substring(2);
+    }
+    if (!raw.startsWith('MS')) {
+      return 'MS-' + raw;
+    }
+    return raw;
+  }
+
+  function renderTrackingCard(data) {
+    const status = data.status || 'Pending';
+
+    // Calculate stepper phase
+    let step1 = 'completed', step2 = '', step3 = '', step4 = '';
+    let progressWidth = '25%';
+
+    const stLower = status.toLowerCase();
+    if (stLower.includes('pending')) {
+      step1 = 'active';
+      progressWidth = '25%';
+    } else if (stLower.includes('working') || stLower.includes('progress')) {
+      step1 = 'completed';
+      step2 = 'active';
+      progressWidth = '60%';
+    } else if (stLower.includes('review')) {
+      step1 = 'completed';
+      step2 = 'completed';
+      step3 = 'active';
+      progressWidth = '85%';
+    } else if (stLower.includes('complete') || stLower.includes('done') || stLower.includes('delivered')) {
+      step1 = 'completed';
+      step2 = 'completed';
+      step3 = 'completed';
+      step4 = 'completed';
+      progressWidth = '100%';
+    }
+
+    resultDiv.innerHTML = `
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(139,92,246,0.35); border-radius: 16px; padding: 2rem; margin-top: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+          <div>
+            <span class="status ${status.toLowerCase()}">${status}</span>
+            <h2 style="color: white; margin-top: 0.5rem; font-size: 1.5rem;">${data.service || 'Custom Service'}</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-top: 0.25rem;">Tracking ID: <strong style="color: var(--accent-green); font-size: 1.1rem;">${data.trackingId}</strong></p>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 1.5rem; font-weight: 800; color: var(--accent-green);">₹${(Number(data.budget) || 0).toLocaleString('en-IN')}</div>
+            <span style="font-size: 0.8rem; color: var(--text-secondary);">Estimated Investment</span>
+          </div>
+        </div>
+
+        <!-- Stepper Progress UI -->
+        <div class="stepper-container" style="margin: 2rem 0;">
+          <div class="stepper">
+            <div class="stepper-progress" style="width: ${progressWidth};"></div>
+            <div class="step-item ${step1}">
+              <div class="step-icon"><i class="fa-solid fa-paper-plane"></i></div>
+              <span class="step-label">Submitted</span>
+            </div>
+            <div class="step-item ${step2}">
+              <div class="step-icon"><i class="fa-solid fa-code"></i></div>
+              <span class="step-label">In Development</span>
+            </div>
+            <div class="step-item ${step3}">
+              <div class="step-icon"><i class="fa-solid fa-vial-circle-check"></i></div>
+              <span class="step-label">Testing & QA</span>
+            </div>
+            <div class="step-item ${step4}">
+              <div class="step-icon"><i class="fa-solid fa-circle-check"></i></div>
+              <span class="step-label">Delivered</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.35); border-radius: 12px; padding: 1.25rem; margin-top: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+            <h4 style="color: var(--primary-purple);"><i class="fa-solid fa-circle-info"></i> Project Brief:</h4>
+            <span style="color: var(--text-secondary); font-size: 0.85rem;">Client: <strong>${data.name || 'Client'}</strong> (${data.email || 'N/A'})</span>
+          </div>
+          <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6;">${data.description || 'No specific description provided.'}</p>
+          
+          ${(data.attachments && data.attachments.length > 0) ? `
+            <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 0.85rem;">
+              <h5 style="color: var(--accent-green); font-size: 0.85rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-paperclip"></i> Attached Project Files (${data.attachments.length}):</h5>
+              <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                ${data.attachments.map(att => `
+                  <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(15,23,42,0.8); border: 1px solid rgba(139,92,246,0.3); border-radius: 8px; padding: 0.5rem 0.85rem; font-size: 0.85rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden;">
+                      <i class="${getFileIcon(att.name, att.type)}" style="color: var(--accent-green);"></i>
+                      <span style="color: white; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px;">${att.name}</span>
+                      <span style="color: var(--text-secondary); font-size: 0.75rem;">(${formatBytes(att.size)})</span>
+                    </div>
+                    <div style="display: flex; gap: 0.4rem;">
+                      <button type="button" class="btn secondary btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;" onclick="window.downloadAttachment('${att.fileId || att.url}', '${att.name}')">
+                        <i class="fa-solid fa-download"></i> Download
+                      </button>
+                    </div>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap;">
+          <a href="https://wa.me/919968198010?text=Hi%20Mayank,%20checking%20status%20for%20tracking%20ID:%20${data.trackingId}" target="_blank" rel="noopener noreferrer" class="btn secondary btn-sm" style="border-color: #25d366; color: #25d366;">
+            <i class="fa-brands fa-whatsapp"></i> Chat with Mayank on WhatsApp
+          </a>
+          <button class="btn secondary btn-sm" onclick="navigator.clipboard.writeText(window.location.href); alert('Tracking link copied!');"><i class="fa-solid fa-share-nodes"></i> Share Tracker Link</button>
+        </div>
+      </div>
+    `;
+
+    // Mount Live Chat
+    chatSection.style.display = 'block';
+    const uid = auth.currentUser ? auth.currentUser.uid : 'client_' + data.trackingId;
+    initChat(data.trackingId, uid);
+
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        initChat(data.trackingId, user.uid);
+      }
+    });
+  }
+
+  async function performTracking(rawTrackingId, email) {
+    if (!rawTrackingId) return;
+
+    const normalizedId = normalizeTrackingId(rawTrackingId);
+    resultDiv.innerHTML = '<div style="text-align: center; padding: 2rem;"><span class="loading"></span> Locating project records for <strong>' + normalizedId + '</strong>...</div>';
+    chatSection.style.display = 'none';
+
+    let foundData = null;
+
+    // 1. Check Local Storage for immediate lookup
+    try {
+      const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
+      const localMatch = localList.find(r => {
+        const idMatches = r.trackingId && (
+          r.trackingId.toUpperCase() === normalizedId ||
+          r.trackingId.toUpperCase() === rawTrackingId.trim().toUpperCase()
+        );
+        if (email && email.trim()) {
+          return idMatches && r.email && r.email.toLowerCase() === email.trim().toLowerCase();
+        }
+        return idMatches;
+      });
+      if (localMatch) {
+        foundData = localMatch;
+      }
+    } catch (e) {
+      console.warn('Local storage lookup notice:', e);
+    }
+
+    // 2. Query Firestore database
+    try {
+      if (!auth.currentUser) {
+        try {
+          await signInAnonymously(auth);
+        } catch (e) {}
+      }
+
+      // Query with normalized tracking ID
+      const q1 = query(
+        collection(db, 'service_requests'),
+        where('trackingId', '==', normalizedId)
+      );
+      const snap1 = await getDocs(q1);
+
+      if (!snap1.empty) {
+        snap1.forEach(docSnap => {
+          const docData = docSnap.data();
+          if (!email || !email.trim() || (docData.email && docData.email.toLowerCase() === email.trim().toLowerCase())) {
+            foundData = { id: docSnap.id, ...docData };
+          }
+        });
+      }
+
+      // If not found, try raw tracking ID
+      if (!foundData && rawTrackingId.trim().toUpperCase() !== normalizedId) {
+        const q2 = query(
+          collection(db, 'service_requests'),
+          where('trackingId', '==', rawTrackingId.trim())
+        );
+        const snap2 = await getDocs(q2);
+        if (!snap2.empty) {
+          snap2.forEach(docSnap => {
+            foundData = { id: docSnap.id, ...docSnap.data() };
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('Firestore query notice:', err.message);
+    }
+
+    if (foundData) {
+      renderTrackingCard(foundData);
+    } else {
+      resultDiv.innerHTML = `
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.4); border-radius: 12px; padding: 2rem; text-align: center; color: #fca5a5; margin-top: 1.5rem;">
+          <i class="fa-solid fa-circle-exclamation" style="font-size: 2.5rem; margin-bottom: 0.75rem;"></i>
+          <h3 style="color: white; margin-bottom: 0.5rem;">No Request Found for "${normalizedId}"</h3>
+          <p style="font-size: 0.9rem; margin-top: 0.5rem; color: #cbd5e1;">Please verify your Tracking ID (format: MS-XXXXX). If you just placed a request, you can also submit a new project below.</p>
+          <div style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+            <a href="/request/" class="btn primary btn-sm"><i class="fa-solid fa-plus"></i> Submit New Request</a>
+            <a href="https://wa.me/919968198010" target="_blank" class="btn secondary btn-sm" style="border-color:#25d366; color:#25d366;"><i class="fa-brands fa-whatsapp"></i> Contact Mayank</a>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  // Handle URL parameters for direct link /track/?id=MS-12345
+  const urlParams = new URLSearchParams(window.location.search);
+  const directId = urlParams.get('id');
+  if (directId) {
+    document.getElementById('trackId').value = directId;
+    performTracking(directId, null);
+  }
+
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const trackId = document.getElementById('trackId').value;
+      const trackEmail = document.getElementById('trackEmail').value;
+      performTracking(trackId, trackEmail);
+    });
+  }
+
+  // Mobile Menu Toggle & Auto-Close
+  const menuBtn = document.getElementById('menuBtn');
+  const navMenu = document.getElementById('navMenu');
+  if (menuBtn && navMenu) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isExpanded = navMenu.classList.toggle('show');
+      menuBtn.setAttribute('aria-expanded', isExpanded);
+    });
+
+    navMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        navMenu.classList.remove('show');
+        menuBtn.setAttribute('aria-expanded', 'false');
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!navMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+        navMenu.classList.remove('show');
+        menuBtn.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+</script>
+</body>
+</html>

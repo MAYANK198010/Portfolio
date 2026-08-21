@@ -1,60 +1,114 @@
 import * as THREE from 'https://unpkg.com/three@0.169.0/build/three.module.js';
-
 import { auth } from './firebase.js';
 import { onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
-// Firebase imports not used for 3D hero - commented out
-// import { db } from "./firebase.js";
-// import { collection, addDoc, serverTimestamp, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-
-// 3D City Hero Scene
-let scene, camera, renderer, buildings = [];
+// 3D Cyber City Hero Scene
+let scene, camera, renderer, buildings = [], stars;
+let mouseX = 0, mouseY = 0;
 
 function init3DCity() {
   const canvas = document.getElementById('hero3d');
   if (!canvas) return;
 
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+  scene.fog = new THREE.FogExp2(0x0a0e17, 0.008);
+
+  camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 25, 60);
+
+  renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
-  // City lights
-  const light = new THREE.AmbientLight(0x404040, 0.6);
-  scene.add(light);
-  const pointLight = new THREE.PointLight(0x8b5cf6, 1, 100);
-  pointLight.position.set(0, 50, 0);
-  scene.add(pointLight);
+  // Lighting
+  const ambientLight = new THREE.AmbientLight(0x1a2035, 1.5);
+  scene.add(ambientLight);
 
-  // Buildings
-  for (let i = 0; i < 100; i++) {
-    const geometry = new THREE.BoxGeometry(
-      Math.random() * 5 + 2,
-      Math.random() * 40 + 10,
-      Math.random() * 5 + 2
-    );
-    const material = new THREE.MeshPhongMaterial({ color: Math.random() * 0xffffff });
-    const building = new THREE.Mesh(geometry, material);
+  const purpleLight = new THREE.PointLight(0x8b5cf6, 3, 160);
+  purpleLight.position.set(-30, 40, 30);
+  scene.add(purpleLight);
+
+  const greenLight = new THREE.PointLight(0x10b981, 3, 160);
+  greenLight.position.set(30, 40, -30);
+  scene.add(greenLight);
+
+  // Buildings Geometry
+  const colors = [0x8b5cf6, 0x10b981, 0x3b82f6, 0x1e293b, 0x0f172a];
+  const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+  for (let i = 0; i < 90; i++) {
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.3,
+      metalness: 0.8,
+      wireframe: Math.random() > 0.85
+    });
+
+    const building = new THREE.Mesh(boxGeometry, material);
+    const width = Math.random() * 6 + 3;
+    const height = Math.random() * 45 + 10;
+    const depth = Math.random() * 6 + 3;
+
+    building.scale.set(width, height, depth);
     building.position.set(
-      (Math.random() - 0.5) * 200,
-      geometry.parameters.height / 2,
-      (Math.random() - 0.5) * 200
+      (Math.random() - 0.5) * 180,
+      height / 2,
+      (Math.random() - 0.5) * 180
     );
     scene.add(building);
     buildings.push(building);
   }
 
-  camera.position.set(0, 30, 50);
-  camera.lookAt(0, 0, 0);
+  // Particle Stars
+  const starGeo = new THREE.BufferGeometry();
+  const starCount = 800;
+  const starPositions = new Float32Array(starCount * 3);
 
+  for (let i = 0; i < starCount * 3; i += 3) {
+    starPositions[i] = (Math.random() - 0.5) * 300;
+    starPositions[i + 1] = Math.random() * 120 + 10;
+    starPositions[i + 2] = (Math.random() - 0.5) * 300;
+  }
+
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xa78bfa,
+    size: 1.2,
+    transparent: true,
+    opacity: 0.7
+  });
+  stars = new THREE.Points(starGeo, starMat);
+  scene.add(stars);
+
+  // Grid Floor
+  const gridHelper = new THREE.GridHelper(250, 50, 0x8b5cf6, 0x1e293b);
+  gridHelper.position.y = 0;
+  scene.add(gridHelper);
+
+  // Mouse Parallax listener
+  window.addEventListener('mousemove', (e) => {
+    mouseX = (e.clientX - window.innerWidth / 2) * 0.0005;
+    mouseY = (e.clientY - window.innerHeight / 2) * 0.0005;
+  });
+
+  // Animation Loop
   function animate() {
     requestAnimationFrame(animate);
-    buildings.forEach((b, i) => {
-      b.rotation.y += 0.005;
-      b.position.y += Math.sin(Date.now() * 0.001 + i) * 0.01;
+    const time = Date.now() * 0.001;
+
+    buildings.forEach((b, idx) => {
+      b.position.y += Math.sin(time + idx) * 0.015;
     });
-    camera.position.x = Math.sin(Date.now() * 0.0005) * 10;
+
+    if (stars) {
+      stars.rotation.y = time * 0.02;
+    }
+
+    camera.position.x += (Math.sin(time * 0.2) * 15 + mouseX * 40 - camera.position.x) * 0.05;
+    camera.position.y += (25 + Math.cos(time * 0.3) * 4 - mouseY * 30 - camera.position.y) * 0.05;
+    camera.lookAt(0, 15, 0);
+
     renderer.render(scene, camera);
   }
   animate();
@@ -66,222 +120,128 @@ function init3DCity() {
   });
 }
 
-// Typing animation
-function typeWriter(element, text, speed = 100) {
-  let i = 0;
-  element.innerHTML = '';
-  function type() {
-    if (i < text.length) {
-      element.innerHTML += text.charAt(i);
-      i++;
-      setTimeout(type, speed);
+// Typing Effect
+function typeWriter(element, words, delay = 100) {
+  let wordIdx = 0;
+  let charIdx = 0;
+  let isDeleting = false;
+
+  function loop() {
+    const currentWord = words[wordIdx];
+    if (isDeleting) {
+      element.innerHTML = currentWord.substring(0, charIdx - 1);
+      charIdx--;
+    } else {
+      element.innerHTML = currentWord.substring(0, charIdx + 1);
+      charIdx++;
     }
+
+    let speed = delay;
+    if (isDeleting) speed /= 2;
+
+    if (!isDeleting && charIdx === currentWord.length) {
+      speed = 2000;
+      isDeleting = true;
+    } else if (isDeleting && charIdx === 0) {
+      isDeleting = false;
+      wordIdx = (wordIdx + 1) % words.length;
+      speed = 500;
+    }
+
+    setTimeout(loop, speed);
   }
-  type();
+  loop();
 }
 
-// Global auth listener
+// Global Auth State
 onAuthStateChanged(auth, (user) => {
-  const loginLinks = document.querySelectorAll('a[href="/login/"], a[href="/register/"]');
-  const navLogout = document.querySelector('nav');
-  
+  const authLinks = document.querySelectorAll('.auth-link');
+  const navList = document.querySelector('nav ul');
+
+  // Remove existing dynamic auth items
+  const existingDynamic = document.querySelectorAll('.dynamic-auth');
+  existingDynamic.forEach(el => el.remove());
+
   if (user) {
-    // Hide login/register, show logout
-    loginLinks.forEach(link => link.style.display = 'none');
-    const logoNav = document.querySelector('.logo');
-    const newNavItem = document.createElement('li');
-    newNavItem.innerHTML = `<a href="#" id="globalLogout" style="color: var(--accent-green); font-weight: bold;">Logout (${user.email.split('@')[0]})</a>`;
-    navLogout.appendChild(newNavItem);
+    authLinks.forEach(link => link.style.display = 'none');
     
-    // Logout handler
-    document.getElementById('globalLogout').onclick = async (e) => {
-      e.preventDefault();
-      await signOut(auth);
-    };
+    if (navList) {
+      const isMayank = user.email === 'mayank198010@gmail.com';
+      const item = document.createElement('li');
+      item.className = 'dynamic-auth';
+      item.innerHTML = `
+        <a href="/dashboard/" style="color: var(--accent-green); font-weight: 600;"><i class="fa-solid fa-user"></i> Dashboard</a>
+      `;
+      navList.appendChild(item);
+
+      if (isMayank) {
+        const adminItem = document.createElement('li');
+        adminItem.className = 'dynamic-auth';
+        adminItem.innerHTML = `
+          <a href="/admin.html" style="color: #fbbf24; font-weight: 600;"><i class="fa-solid fa-shield"></i> Admin</a>
+        `;
+        navList.appendChild(adminItem);
+      }
+    }
   } else {
-    // Show login/register
-    loginLinks.forEach(link => link.style.display = 'block');
-    const logoutLink = document.getElementById('globalLogout');
-    if (logoutLink) logoutLink.parentElement.remove();
+    authLinks.forEach(link => link.style.display = 'inline-block');
   }
 });
 
-// Init on load
+// Initialization
 document.addEventListener('DOMContentLoaded', () => {
-  // WebGL support check
-  const canvas = document.createElement('canvas');
-  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-  if (!gl) {
-    console.error('WebGL not supported - 3D scene disabled');
-    return;
+  // Mobile Nav Toggle & Auto-close on link click
+  const menuBtn = document.getElementById('menuBtn');
+  const navMenu = document.getElementById('navMenu');
+  if (menuBtn && navMenu) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navMenu.classList.toggle('show');
+    });
+
+    // Auto-close when clicking any link
+    navMenu.querySelectorAll('a').forEach(link => {
+      link.addEventListener('click', () => {
+        navMenu.classList.remove('show');
+      });
+    });
+
+    // Auto-close when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!navMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+        navMenu.classList.remove('show');
+      }
+    });
   }
 
+  // Navbar Scroll Glass Effect
+  const navbar = document.querySelector('.navbar');
+  if (navbar) {
+    window.addEventListener('scroll', () => {
+      if (window.scrollY > 50) {
+        navbar.classList.add('scrolled');
+      } else {
+        navbar.classList.remove('scrolled');
+      }
+    });
+  }
+
+  // Init 3D Scene
   try {
     init3DCity();
-    console.log('✅ 3D city hero initialized successfully');
-  } catch (error) {
-    console.error('❌ 3D init failed:', error);
+  } catch (err) {
+    console.error("3D Scene init failed:", err);
   }
 
+  // Typing Effect
   const typingEl = document.querySelector('.typing');
-  if (typingEl) typeWriter(typingEl, 'Maynix Studios - 3D Digital Worlds');
+  if (typingEl) {
+    typeWriter(typingEl, [
+      'MayankZen Studios',
+      'Where Code Meets Creativity',
+      'Futuristic 3D Web Experiences',
+      'Intelligent AI Automations',
+      'High-Impact Digital Solutions'
+    ], 90);
+  }
 });
-
-// =============================
-  // SMOOTH SCROLL
-  // =============================
-
-function scrollContact() {
-
-const contact = document.getElementById("contact");
-
-if(contact){
-contact.scrollIntoView({
-behavior:"smooth"
-});
-}
-
-}
-
-
-// =============================
-// MOBILE MENU
-// =============================
-
-const menuBtn = document.getElementById("menuBtn");
-const nav = document.querySelector("nav");
-
-if(menuBtn && nav){
-menuBtn.addEventListener("click",()=>{
-nav.classList.toggle("show");
-});
-}
-
-
-// =============================
-// SERVICE REQUEST SUBMIT
-// =============================
-
-const form = document.getElementById("serviceForm");
-
-if(form){
-
-form.addEventListener("submit", async (e)=>{
-
-e.preventDefault();
-
-try{
-
-const name = document.getElementById("name").value;
-const email = document.getElementById("email").value;
-const mobile = document.getElementById("mobile").value;
-const service = document.getElementById("service").value;
-const budget = document.getElementById("budget").value;
-const description = document.getElementById("description").value;
-
-const trackingId = "MS-" + Math.floor(10000 + Math.random()*90000);
-
-await addDoc(collection(db,"service_requests"),{
-
-trackingId,
-name,
-email,
-mobile,
-service,
-budget,
-description,
-status:"Pending",
-timestamp:serverTimestamp()
-
-});
-
-alert("✅ Request submitted successfully!\nTracking ID: "+trackingId);
-
-form.reset();
-
-}catch(error){
-
-console.error("Submit Error:",error);
-alert("❌ Error submitting request");
-
-}
-
-});
-
-}
-
-
-// =============================
-// TRACK REQUEST
-// =============================
-
-async function trackRequest(){
-
-const trackingInput = document.getElementById("trackId");
-const emailInput = document.getElementById("trackEmail");
-const resultDiv = document.getElementById("trackResult");
-
-if(!trackingInput || !emailInput || !resultDiv) return;
-
-const trackingId = trackingInput.value.trim();
-const email = emailInput.value.trim();
-
-resultDiv.innerHTML = "Checking...";
-
-try{
-
-const q = query(
-collection(db,"service_requests"),
-where("trackingId","==",trackingId),
-where("email","==",email)
-);
-
-const querySnapshot = await getDocs(q);
-
-if(querySnapshot.empty){
-
-resultDiv.innerHTML = "❌ No request found.";
-return;
-
-}
-
-querySnapshot.forEach((doc)=>{
-
-const data = doc.data();
-
-resultDiv.innerHTML = `
-<div class="track-card">
-
-<h3>Request Status</h3>
-
-<p><strong>Service:</strong> ${data.service}</p>
-<p><strong>Status:</strong> ${data.status}</p>
-<p><strong>Budget:</strong> ₹${data.budget}</p>
-<p><strong>Description:</strong> ${data.description}</p>
-
-</div>
-`;
-
-});
-
-}catch(error){
-
-console.error("Tracking Error:",error);
-resultDiv.innerHTML = "❌ Error fetching request.";
-
-}
-
-}
-
-
-// =============================
-// TRACK BUTTON EVENT
-// =============================
-
-const trackBtn = document.getElementById("trackBtn");
-
-if(trackBtn){
-
-trackBtn.addEventListener("click",trackRequest);
-
-}

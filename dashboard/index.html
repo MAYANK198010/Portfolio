@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Client Portal & Dashboard | MayankZen Studios</title>
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Favicon & Site Icons -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+
+  <link rel="stylesheet" href="../style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    .dashboard-container {
+      max-width: 1200px;
+      margin: 120px auto 60px;
+      padding: 20px;
+    }
+    .user-banner {
+      background: var(--glass-bg);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      border-radius: var(--border-radius);
+      padding: 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      margin-bottom: 2.5rem;
+      backdrop-filter: blur(20px);
+    }
+  </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- ===== NAVBAR ===== -->
+<header class="navbar">
+  <div class="logo">
+    <a href="/" class="logo-brand">
+      <img src="/logo-icon.svg" alt="MayankZen Studios Emblem" class="brand-logo-img" width="40" height="40">
+      <span class="brand-text">MayankZen <span class="brand-sub">Studio</span></span>
+    </a>
+  </div>
+  <nav>
+    <ul id="navMenu">
+      <li><a href="/">Home</a></li>
+      <li><a href="/#services">Services</a></li>
+      <li><a href="/#portfolio">Projects</a></li>
+      <li><a href="/request/">Request</a></li>
+      <li><a href="/track/">Track</a></li>
+      <li><a href="/dashboard/" style="color: var(--accent-green); font-weight: bold;">Dashboard</a></li>
+      <li><a href="#" id="dashboardLogoutBtn" style="color: #ef4444;"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a></li>
+    </ul>
+  </nav>
+  <button class="menu-toggle" id="menuBtn">☰</button>
+</header>
+
+<main class="dashboard-container">
+  <!-- Admin Banner (if admin) -->
+  <div id="adminNoticeBanner" style="display: none; background: rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.6); border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 2rem; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <i class="fa-solid fa-shield-halved" style="color: var(--accent-green); font-size: 1.5rem;"></i>
+      <div>
+        <strong style="color: white;">Administrator Account Detected</strong>
+        <p style="color: var(--text-secondary); font-size: 0.85rem;">You have access to the Studio Operations Center and full project control.</p>
+      </div>
+    </div>
+    <a href="/admin.html" class="btn primary btn-sm"><i class="fa-solid fa-gauge-high"></i> Open Admin Panel</a>
+  </div>
+
+  <!-- User Banner -->
+  <div class="user-banner">
+    <div style="display: flex; align-items: center; gap: 1.25rem;">
+      <div id="userAvatar" style="width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-purple), var(--accent-green)); display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; color: white;">
+        U
+      </div>
+      <div>
+        <h1 id="userNameDisplay" style="font-size: 1.6rem; color: white; margin-bottom: 0.2rem;">Welcome Back</h1>
+        <p id="userEmailDisplay" style="color: var(--text-secondary); font-size: 0.95rem;">Loading account details...</p>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      <a href="/request/" class="btn primary btn-sm"><i class="fa-solid fa-plus"></i> New Request</a>
+      <a href="/track/" class="btn secondary btn-sm"><i class="fa-solid fa-magnifying-glass"></i> Track ID</a>
+    </div>
+  </div>
+
+  <!-- Active Requests Section -->
+  <div style="margin-bottom: 3rem;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+      <h2 style="color: var(--primary-purple); font-size: 1.4rem;"><i class="fa-solid fa-folder-open"></i> Your Active Project Requests</h2>
+      <button onclick="loadUserRequests()" class="btn secondary btn-sm"><i class="fa-solid fa-rotate"></i> Refresh</button>
+    </div>
+
+    <div id="userRequestsList" class="cards" style="grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));">
+      <div class="card" style="text-align: center; padding: 2rem;">
+        <span class="loading"></span>
+        <p style="margin-top: 1rem; color: var(--text-secondary);">Loading your requests...</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <p>© 2026 MayankZen Studios | Building Digital Worlds. All rights reserved.</p>
+</footer>
+
+<script type="module" src="../dashboard.js"></script>
+<script>
+  const menuBtn = document.getElementById('menuBtn');
+  const navMenu = document.getElementById('navMenu');
+  if (menuBtn && navMenu) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navMenu.classList.toggle('show');
+    });
+    document.addEventListener('click', (e) => {
+      if (!navMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+        navMenu.classList.remove('show');
+      }
+    });
+  }
+</script>
+</body>
+</html>

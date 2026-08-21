@@ -1,50 +1,112 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Studio Monitoring Dashboard | MayankZen Studios Admin</title>
+  <meta name="robots" content="noindex, nofollow">
 
-<title>MayankZen Studios Admin</title>
+  <!-- Favicon & Site Icons -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
 
- <link rel="stylesheet" href="style.css">
-
-<style>
-
-.admin-container{
-max-width:1000px;
-margin:auto;
-padding:40px;
-}
-
-table{
-width:100%;
-border-collapse:collapse;
-margin-top:30px;
-}
-
-th,td{
-padding:12px;
-border-bottom:1px solid #444;
-text-align:left;
-}
-
-select{
-padding:6px;
-}
-
-td{
-max-width:200px;
-white-space:nowrap;
-overflow:hidden;
-text-overflow:ellipsis;
-}
-
-</style>
-
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    .admin-container {
+      max-width: 1400px;
+      margin: 100px auto 60px;
+      padding: 20px;
+    }
+    .admin-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(139, 92, 246, 0.3);
+    }
+    .admin-tabs {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 0.5rem;
+    }
+    .admin-tab-btn {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: var(--transition);
+    }
+    .admin-tab-btn.active {
+      color: var(--accent-green);
+      background: rgba(16, 185, 129, 0.15);
+    }
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 2rem;
+      margin-bottom: 2.5rem;
+    }
+    .chart-card {
+      background: var(--glass-bg);
+      border: 1px solid rgba(139, 92, 246, 0.25);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      backdrop-filter: blur(20px);
+    }
+  </style>
 </head>
-
 <body>
 
-<div class="admin-dashboard">
-  <h1>Studio Monitoring Dashboard</h1>
+<div id="toast-container"></div>
+
+<!-- ===== NAVBAR ===== -->
+<header class="navbar">
+  <div class="logo">
+    <a href="/" class="logo-brand">
+      <img src="/logo-icon.svg" alt="MayankZen Studios Emblem" class="brand-logo-img" width="40" height="40">
+      <span class="brand-text">MayankZen <span class="brand-sub">Admin</span></span>
+    </a>
+  </div>
+  <nav>
+    <ul id="navMenu">
+      <li><a href="/">Home</a></li>
+      <li><a href="/dashboard/">Client Dashboard</a></li>
+      <li><a href="/admin.html" style="color: var(--accent-green); font-weight: bold;">Admin Panel</a></li>
+      <li><a href="#" id="adminLogoutBtn" style="color: #ef4444;"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</a></li>
+    </ul>
+  </nav>
+  <button class="menu-toggle" id="menuBtn">☰</button>
+</header>
+
+<main class="admin-container">
+  <!-- Top Bar -->
+  <div class="admin-header">
+    <div>
+      <h1 style="color: var(--primary-purple); font-size: 2rem;">Studio Operations Center</h1>
+      <p style="color: var(--text-secondary); margin-top: 0.25rem;">Logged in as: <strong id="adminEmailDisplay" style="color: var(--accent-green);">Checking auth...</strong></p>
+    </div>
+    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+      <button onclick="refreshData()" class="btn secondary btn-sm"><i class="fa-solid fa-rotate"></i> Refresh</button>
+      <button onclick="exportRequestsCSV()" class="btn secondary btn-sm"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+      <a href="/request/" target="_blank" class="btn primary btn-sm"><i class="fa-solid fa-plus"></i> New Request</a>
+    </div>
+  </div>
+
+  <!-- KPI Metrics Grid -->
   <div class="stats-grid">
     <div class="stat-card">
       <h3>Total Requests</h3>
@@ -52,37 +114,162 @@ text-overflow:ellipsis;
     </div>
     <div class="stat-card">
       <h3>Pending</h3>
-      <span id="pendingCount">0</span>
+      <span id="pendingCount" style="color: #fbbf24;">0</span>
     </div>
     <div class="stat-card">
-      <h3>Working</h3>
-      <span id="activeCount">0</span>
+      <h3>In Progress</h3>
+      <span id="activeCount" style="color: #a78bfa;">0</span>
     </div>
     <div class="stat-card">
       <h3>Completed</h3>
-      <span id="completeCount">0</span>
+      <span id="completeCount" style="color: #34d399;">0</span>
+    </div>
+    <div class="stat-card">
+      <h3>Estimated Pipeline</h3>
+      <span id="totalRevenue" style="font-size: 1.8rem;">₹0</span>
     </div>
   </div>
-  <canvas id="statusChart" width="400" height="400" style="max-width: 300px; margin: 2rem auto; display: block;"></canvas>
-  <div class="requests-list">
-    <table>
-      <thead>
-        <tr>
-          <th>Client</th>
-          <th>Service</th>
-          <th>Status</th>
-          <th>Tracking ID</th>
-          <th>Chat</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody id="requestsTable"></tbody>
-    </table>
+
+  <!-- Charts Row -->
+  <div class="chart-grid">
+    <div class="chart-card">
+      <h3 style="color: var(--primary-purple); margin-bottom: 1rem; text-align: center;"><i class="fa-solid fa-chart-pie"></i> Request Status Breakdown</h3>
+      <canvas id="statusChart" style="max-height: 260px;"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3 style="color: var(--accent-green); margin-bottom: 1rem; text-align: center;"><i class="fa-solid fa-chart-column"></i> Services Distribution</h3>
+      <canvas id="servicesChart" style="max-height: 260px;"></canvas>
+    </div>
+  </div>
+
+  <!-- Tab Navigation -->
+  <div class="admin-tabs">
+    <button class="admin-tab-btn active" onclick="switchAdminTab('requests')"><i class="fa-solid fa-list-check"></i> Project Requests</button>
+    <button class="admin-tab-btn" onclick="switchAdminTab('admins')"><i class="fa-solid fa-user-shield"></i> Approved Admins</button>
+  </div>
+
+  <!-- Requests Tab Content -->
+  <div id="requestsTabContent">
+    <div class="admin-toolbar">
+      <div class="admin-search">
+        <input type="text" id="requestSearchInput" placeholder="Search by Client, ID, Service, Email..." oninput="filterTable()">
+      </div>
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <label style="color: var(--text-secondary); font-size: 0.9rem;">Filter Status:</label>
+        <select id="statusFilterSelect" onchange="filterTable()" style="background: var(--glass-bg); color: white; border: 1px solid var(--primary-purple); padding: 0.6rem 1rem; border-radius: 8px;">
+          <option value="ALL">All Statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="Working">Working / In Progress</option>
+          <option value="Review">In Review</option>
+          <option value="Completed">Completed</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Tracking ID</th>
+            <th>Client Info</th>
+            <th>Service</th>
+            <th>Budget</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="requestsTable">
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 2rem;">Loading project requests...</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Admins Tab Content -->
+  <div id="adminsTabContent" style="display: none;">
+    <div class="card" style="max-width: 700px; margin: 0 auto; text-align: left;">
+      <h3 style="color: var(--primary-purple); margin-bottom: 1rem;"><i class="fa-solid fa-shield-halved"></i> Manage Studio Admins</h3>
+      <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">The primary owner (<strong>mayank198010@gmail.com</strong>) has permanent master access. You can grant admin rights to additional email addresses below.</p>
+      
+      <div style="display: flex; gap: 0.75rem; margin-bottom: 2rem;">
+        <input type="email" id="newAdminEmail" placeholder="admin@example.com" style="flex: 1; padding: 0.75rem 1rem; background: rgba(0,0,0,0.5); border: 1px solid var(--primary-purple); border-radius: 8px; color: white;">
+        <button onclick="addApprovedAdmin()" class="btn primary btn-sm"><i class="fa-solid fa-user-plus"></i> Grant Access</button>
+      </div>
+
+      <h4 style="color: var(--accent-green); margin-bottom: 1rem;">Authorized Admin Accounts:</h4>
+      <div id="adminsList" style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <div style="padding: 0.75rem; background: rgba(0,0,0,0.3); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+          <span><strong>mayank198010@gmail.com</strong> (Founder / Master)</span>
+          <span class="status completed" style="margin-bottom: 0;">Master</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Project Details Modal -->
+<div id="adminDetailModal" class="modal-backdrop" onclick="if(event.target===this)closeAdminDetailModal()">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeAdminDetailModal()">&times;</button>
+    <h2 id="detailClientName" style="color: var(--primary-purple); margin-bottom: 0.5rem;">Client Details</h2>
+    <div id="detailContent" style="color: var(--text-secondary); line-height: 1.8; margin-top: 1rem;"></div>
+    <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+      <button class="btn secondary btn-sm" onclick="closeAdminDetailModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Live Chat Drawer Modal -->
+<div id="adminChatModal" class="modal-backdrop" onclick="if(event.target===this)closeAdminChatModal()">
+  <div class="modal-content" style="max-width: 750px; padding: 1.75rem;">
+    <button class="modal-close" onclick="closeAdminChatModal()">&times;</button>
+    <div class="chat-header" style="padding-bottom: 0.75rem; margin-bottom: 1rem;">
+      <div class="chat-header-info">
+        <div class="chat-avatar-status" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">
+          <i class="fa-solid fa-user-shield"></i>
+          <span class="chat-online-dot" style="background: #3b82f6;"></span>
+        </div>
+        <div class="chat-header-titles">
+          <h3>Admin Studio Terminal</h3>
+          <p>Direct Session with Request: <strong id="adminChatTargetId" style="color: var(--accent-green);"></strong></p>
+        </div>
+      </div>
+    </div>
+    
+    <div id="chatMessages" class="messages"></div>
+    
+    <div class="chat-input-bar">
+      <input type="text" id="messageInput" class="chat-input-field" placeholder="Reply to client as MayankZen Studios (Enter to send)..." autocomplete="off">
+      <input type="file" id="fileInput" style="display: none;">
+      <button type="button" onclick="document.getElementById('fileInput').click()" class="chat-btn-icon chat-btn-attach" title="Attach deliverable file or zip">
+        <i class="fa-solid fa-paperclip"></i>
+      </button>
+      <button type="button" id="sendBtn" class="chat-btn-icon chat-btn-send" title="Send reply">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+    </div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script type="module" src="admin.js"></script>
-
+<script>
+  const menuBtn = document.getElementById('menuBtn');
+  const navMenu = document.getElementById('navMenu');
+  if (menuBtn && navMenu) {
+    menuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navMenu.classList.toggle('show');
+    });
+    document.addEventListener('click', (e) => {
+      if (!navMenu.contains(e.target) && !menuBtn.contains(e.target)) {
+        navMenu.classList.remove('show');
+      }
+    });
+  }
+</script>
 </body>
 </html>
