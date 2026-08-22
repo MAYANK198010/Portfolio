@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { ServerDB } from './server-db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +29,194 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve static assets
 app.use(express.static(__dirname));
+
+/* ==============================================
+   LOCAL SERVER DATABASE (REST APIS)
+   Ensures all data is persistently stored on disk
+   and never vanishes after logout or cache purge.
+============================================== */
+
+// --- 1. Requests API ---
+app.get('/api/db/requests', (req, res) => {
+  try {
+    const { email, status, search } = req.query;
+    const requests = ServerDB.getAllRequests({ email, status, search });
+    res.json({ success: true, count: requests.length, data: requests });
+  } catch (err) {
+    console.error('API get requests error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/db/requests/:id', (req, res) => {
+  try {
+    const request = ServerDB.getRequestById(req.params.id);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Request not found' });
+    }
+    res.json({ success: true, data: request });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/db/requests', (req, res) => {
+  try {
+    const saved = ServerDB.saveRequest(req.body);
+    res.json({ success: true, data: saved });
+  } catch (err) {
+    console.error('API save request error:', err);
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/db/requests/:id', (req, res) => {
+  try {
+    const updated = ServerDB.updateRequest(req.params.id, req.body);
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Request not found' });
+    }
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/db/requests/:id', (req, res) => {
+  try {
+    const deleted = ServerDB.deleteRequest(req.params.id);
+    res.json({ success: true, deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// --- 2. Users API (Divided into Admins and Clients) ---
+app.get('/api/db/users', (req, res) => {
+  try {
+    const users = ServerDB.getAllUsers();
+    const adminUsers = users.filter(u => u.role === 'admin');
+    const clientUsers = users.filter(u => u.role !== 'admin');
+
+    res.json({
+      success: true,
+      total: users.length,
+      adminsCount: adminUsers.length,
+      clientsCount: clientUsers.length,
+      data: users,
+      admins: adminUsers,
+      clients: clientUsers
+    });
+  } catch (err) {
+    console.error('API get users error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/db/users/:idOrEmail', (req, res) => {
+  try {
+    const user = ServerDB.getUserByEmailOrId(req.params.idOrEmail);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.json({ success: true, data: user });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/db/users', (req, res) => {
+  try {
+    const saved = ServerDB.saveUser(req.body);
+    res.json({ success: true, data: saved });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/db/users/:idOrEmail/role', (req, res) => {
+  try {
+    const { role } = req.body;
+    if (!role || (role !== 'admin' && role !== 'user')) {
+      return res.status(400).json({ success: false, message: 'Role must be "admin" or "user"' });
+    }
+    const updated = ServerDB.updateUserRole(req.params.idOrEmail, role);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/db/users/:idOrEmail', (req, res) => {
+  try {
+    const deleted = ServerDB.deleteUser(req.params.idOrEmail);
+    if (!deleted) {
+      return res.status(400).json({ success: false, message: 'Cannot delete master account or user not found' });
+    }
+    res.json({ success: true, deleted });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// --- 3. Chat Messages API ---
+app.get('/api/db/messages/:requestId', (req, res) => {
+  try {
+    const msgs = ServerDB.getMessages(req.params.requestId);
+    res.json({ success: true, data: msgs });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/db/messages/:requestId', (req, res) => {
+  try {
+    const saved = ServerDB.saveMessage(req.params.requestId, req.body);
+    res.json({ success: true, data: saved });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// --- 4. Approved Admins API ---
+app.get('/api/db/admins', (req, res) => {
+  try {
+    const admins = ServerDB.getApprovedAdmins();
+    res.json({ success: true, data: admins });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.post('/api/db/admins', (req, res) => {
+  try {
+    const { email, name } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required' });
+    const list = ServerDB.addApprovedAdmin(email, name);
+    res.json({ success: true, data: list });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+app.delete('/api/db/admins/:email', (req, res) => {
+  try {
+    const removed = ServerDB.removeApprovedAdmin(req.params.email);
+    res.json({ success: true, removed });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// --- 5. Overall System Stats API ---
+app.get('/api/db/stats', (req, res) => {
+  try {
+    const stats = ServerDB.getStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // Attachment Upload API
 app.post('/api/upload', (req, res) => {

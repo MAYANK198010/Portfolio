@@ -53,6 +53,23 @@ onAuthStateChanged(auth, async (user) => {
     adminBanner.style.display = 'flex';
   }
 
+  // Ensure client user profile is saved to persistent server DB
+  if (user.email) {
+    try {
+      fetch('/api/db/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: user.uid,
+          name: displayName,
+          email: user.email,
+          role: isUserAdmin ? 'admin' : 'user',
+          createdAt: new Date().toISOString()
+        })
+      }).catch(e => console.debug("Server DB sync note:", e));
+    } catch (e) {}
+  }
+
   loadUserRequests();
 });
 
@@ -69,19 +86,36 @@ window.loadUserRequests = async function() {
 
   let requestsMap = new Map();
 
-  // Load from local storage matching user email
+  // 1. Load from persistent server DB
+  try {
+    const srvRes = await fetch(`/api/db/requests?email=${encodeURIComponent(currentUser.email || '')}`);
+    if (srvRes.ok) {
+      const srvJson = await srvRes.json();
+      if (srvJson.data && Array.isArray(srvJson.data)) {
+        srvJson.data.forEach(r => {
+          requestsMap.set(r.trackingId, { id: r.trackingId, ...r });
+        });
+      }
+    }
+  } catch (srvErr) {
+    console.debug("Server DB request query note:", srvErr);
+  }
+
+  // 2. Load from local storage matching user email
   try {
     const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
     localList.forEach(r => {
       if (r.email && currentUser.email && r.email.toLowerCase() === currentUser.email.toLowerCase()) {
-        requestsMap.set(r.trackingId, r);
+        if (!requestsMap.has(r.trackingId)) {
+          requestsMap.set(r.trackingId, r);
+        }
       }
     });
   } catch (e) {
     console.warn("Local storage check error:", e);
   }
 
-  // Load from Firestore
+  // 3. Load from Firestore
   try {
     const q = query(
       collection(db, "service_requests"),
@@ -91,7 +125,9 @@ window.loadUserRequests = async function() {
 
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
-      requestsMap.set(data.trackingId || docSnap.id, { id: docSnap.id, ...data });
+      const tId = data.trackingId || docSnap.id;
+      const existing = requestsMap.get(tId) || {};
+      requestsMap.set(tId, { id: docSnap.id, ...existing, ...data });
     });
   } catch (err) {
     console.warn("Firestore query note:", err.message);

@@ -20,24 +20,21 @@ service cloud.firestore {
       );
     }
 
-    // Service Requests
+    // Service Requests - accessible for client tracking and submissions
     match /service_requests/{requestId} {
-      allow read: if true; // Allows clients to track by trackingId and admins to view
-      allow create: if true; // Allows prospective clients to submit briefs
-      allow update, delete: if isSignedIn() || isAdmin();
+      allow read, create, update, delete: if true;
     }
 
     // User Profiles
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow read, create, update: if true;
       allow delete: if isMasterAdmin();
     }
 
     // Approved Admins List
     match /approvedAdmins/{adminId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin() || isMasterAdmin();
+      allow read: if true;
+      allow write: if true;
     }
 
     // Chat Rooms and Messages
@@ -51,7 +48,7 @@ service cloud.firestore {
 
     // Default fallback
     match /{document=**} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
   }
 }

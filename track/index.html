@@ -319,27 +319,42 @@
 
     let foundData = null;
 
-    // 1. Check Local Storage for immediate lookup
+    // 1. Check Server Database for persistent records
     try {
-      const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
-      const localMatch = localList.find(r => {
-        const idMatches = r.trackingId && (
-          r.trackingId.toUpperCase() === normalizedId ||
-          r.trackingId.toUpperCase() === rawTrackingId.trim().toUpperCase()
-        );
-        if (email && email.trim()) {
-          return idMatches && r.email && r.email.toLowerCase() === email.trim().toLowerCase();
+      const srvRes = await fetch(`/api/db/requests/${encodeURIComponent(normalizedId)}`);
+      if (srvRes.ok) {
+        const srvJson = await srvRes.json();
+        if (srvJson.data) {
+          foundData = srvJson.data;
         }
-        return idMatches;
-      });
-      if (localMatch) {
-        foundData = localMatch;
       }
     } catch (e) {
-      console.warn('Local storage lookup notice:', e);
+      console.debug('Server DB lookup notice:', e);
     }
 
-    // 2. Query Firestore database
+    // 2. Check Local Storage for immediate lookup
+    if (!foundData) {
+      try {
+        const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
+        const localMatch = localList.find(r => {
+          const idMatches = r.trackingId && (
+            r.trackingId.toUpperCase() === normalizedId ||
+            r.trackingId.toUpperCase() === rawTrackingId.trim().toUpperCase()
+          );
+          if (email && email.trim()) {
+            return idMatches && r.email && r.email.toLowerCase() === email.trim().toLowerCase();
+          }
+          return idMatches;
+        });
+        if (localMatch) {
+          foundData = localMatch;
+        }
+      } catch (e) {
+        console.warn('Local storage lookup notice:', e);
+      }
+    }
+
+    // 3. Query Firestore database
     try {
       if (!auth.currentUser) {
         try {

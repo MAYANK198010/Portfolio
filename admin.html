@@ -189,32 +189,98 @@
     </div>
   </div>
 
-  <!-- User Management Tab Content -->
+  <!-- User Management Tab Content (Divided into Admin Users & Client Accounts) -->
   <div id="usersTabContent" style="display: none;">
-    <div class="admin-toolbar">
-      <div class="admin-search">
-        <input type="text" id="userSearchInput" placeholder="Search users by name, email, role..." oninput="filterUsersTable()">
+    <div class="admin-toolbar" style="margin-bottom: 1.5rem;">
+      <div class="admin-search" style="flex: 1; max-width: 450px;">
+        <input type="text" id="userSearchInput" placeholder="Search admins or clients by name, email..." oninput="filterUsersTable()">
       </div>
-      <button onclick="loadUsers()" class="btn secondary btn-sm"><i class="fa-solid fa-rotate"></i> Refresh Users</button>
+      
+      <!-- Sub-filter pills -->
+      <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <button id="userSubTabAll" type="button" class="btn primary btn-sm active" onclick="switchUserSubTab('all')">
+          <i class="fa-solid fa-users"></i> All (<span id="totalUsersCountBadge">0</span>)
+        </button>
+        <button id="userSubTabAdmins" type="button" class="btn secondary btn-sm" onclick="switchUserSubTab('admins')">
+          <i class="fa-solid fa-crown" style="color: #fbbf24;"></i> Admin Users (<span id="adminUsersCountBadge">0</span>)
+        </button>
+        <button id="userSubTabClients" type="button" class="btn secondary btn-sm" onclick="switchUserSubTab('clients')">
+          <i class="fa-solid fa-user" style="color: var(--accent-green);"></i> Client Accounts (<span id="clientUsersCountBadge">0</span>)
+        </button>
+        <button onclick="loadUsers()" class="btn secondary btn-sm" title="Reload user database"><i class="fa-solid fa-rotate"></i> Refresh</button>
+      </div>
     </div>
 
-    <div class="table-responsive">
-      <table>
-        <thead>
-          <tr>
-            <th>User / Name</th>
-            <th>Email Address</th>
-            <th>Role</th>
-            <th>Joined</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="usersTable">
-          <tr>
-            <td colspan="5" style="text-align: center; padding: 2rem;">Loading registered users...</td>
-          </tr>
-        </tbody>
-      </table>
+    <!-- 1. ADMIN ACCOUNTS SECTION -->
+    <div id="adminUsersSection" style="margin-bottom: 2.5rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; border-bottom: 1px solid rgba(251, 191, 36, 0.25); padding-bottom: 0.5rem;">
+        <div>
+          <h3 style="color: #fbbf24; margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-crown"></i> Admin Users / Operations Team (<span id="adminUsersHeaderCount">0</span>)
+          </h3>
+          <p style="color: var(--text-secondary); margin: 0.25rem 0 0; font-size: 0.85rem;">
+            Privileged accounts with access to the Admin Operations Center, project statuses, and chat.
+          </p>
+        </div>
+        <button onclick="switchAdminTab('admins')" class="btn secondary btn-sm" style="font-size: 0.8rem; border-color: rgba(251,191,36,0.5); color: #fbbf24;">
+          <i class="fa-solid fa-user-plus"></i> Grant New Admin
+        </button>
+      </div>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Administrator</th>
+              <th>Email Address</th>
+              <th>Access Level</th>
+              <th>Joined / Authorized</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="adminUsersTable">
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 2rem;">Loading admin accounts...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 2. CLIENT ACCOUNTS (NON-ADMIN USERS) SECTION -->
+    <div id="clientUsersSection">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; border-bottom: 1px solid rgba(16, 185, 129, 0.25); padding-bottom: 0.5rem;">
+        <div>
+          <h3 style="color: var(--accent-green); margin: 0; font-size: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-user-group"></i> Client Accounts / Registered Users (<span id="clientUsersHeaderCount">0</span>)
+          </h3>
+          <p style="color: var(--text-secondary); margin: 0.25rem 0 0; font-size: 0.85rem;">
+            Non-admin client accounts registered on the website or created through submitted service requests.
+          </p>
+        </div>
+        <div style="font-size: 0.85rem; color: var(--text-secondary);">
+          Persistent server DB storage enabled
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Client / User</th>
+              <th>Email Address</th>
+              <th>Requests Placed</th>
+              <th>Registered / Active</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="clientUsersTable">
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 2rem;">Loading client accounts...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 

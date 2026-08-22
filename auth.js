@@ -206,6 +206,23 @@ if (registerBtn) {
         createdAt: new Date()
       });
 
+      // Synchronize client account to persistent server DB
+      try {
+        await fetch('/api/db/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: user.uid,
+            name: name,
+            email: email,
+            role: isAdminAccount ? "admin" : "user",
+            createdAt: new Date().toISOString()
+          })
+        });
+      } catch (srvErr) {
+        console.debug("Server DB registration sync notice:", srvErr);
+      }
+
       showToast("Account created successfully! Redirecting to login...", "success");
       setTimeout(() => {
         window.location.href = "/login/";
@@ -271,9 +288,10 @@ if (loginBtn) {
       try {
         const userRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userRef);
+        const uName = isAdmin ? "MayankZen Admin" : (user.displayName || email.split('@')[0]);
         if (!userDoc.exists()) {
           await setDoc(userRef, {
-            name: isAdmin ? "MayankZen Admin" : (user.displayName || email.split('@')[0]),
+            name: uName,
             email: email,
             role: isAdmin ? "admin" : "user",
             createdAt: new Date()
@@ -281,6 +299,19 @@ if (loginBtn) {
         } else if (isAdmin && userDoc.data().role !== 'admin') {
           await setDoc(userRef, { role: 'admin' }, { merge: true });
         }
+
+        // Also sync to persistent server database
+        fetch('/api/db/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: user.uid,
+            name: uName,
+            email: email,
+            role: isAdmin ? "admin" : "user",
+            createdAt: new Date().toISOString()
+          })
+        }).catch(err => console.debug("Server DB login sync:", err));
       } catch (e) {
         console.debug("User doc setup notice:", e);
       }
@@ -343,14 +374,28 @@ if (googleLoginBtn) {
       try {
         const userRef = doc(db, "users", user.uid);
         const userSnap = await getDoc(userRef);
+        const uName = user.displayName || user.email?.split('@')[0] || 'User';
         if (!userSnap.exists()) {
           await setDoc(userRef, {
-            name: user.displayName || user.email?.split('@')[0] || 'User',
+            name: uName,
             email: user.email,
             role: isAdmin ? "admin" : "user",
             createdAt: new Date()
           });
         }
+
+        // Sync to server DB
+        fetch('/api/db/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: user.uid,
+            name: uName,
+            email: user.email,
+            role: isAdmin ? "admin" : "user",
+            createdAt: new Date().toISOString()
+          })
+        }).catch(err => console.debug("Server DB google sync:", err));
       } catch (e) {
         console.debug("Google user profile save notice:", e);
       }

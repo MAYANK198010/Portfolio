@@ -2,17 +2,25 @@
 <html lang="en" prefix="og: https://ogp.me/ns#">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   
   <!-- Primary SEO Meta Tags -->
   <title>MayankZen Studios | Where Code Meets Creativity | Web, AI & 3D Solutions</title>
   <meta name="title" content="MayankZen Studios | Where Code Meets Creativity | Web, AI & 3D Solutions">
-  <meta name="description" content="MayankZen Studios is a premier digital development studio founded by Mayank. We craft high-performance web applications, 3D interactive experiences, AI & automation systems, and custom software.">
-  <meta name="keywords" content="MayankZen Studios, Mayank Kumar, Web Development, Full Stack Developer, 3D WebGL Three.js, AI Automation, Freelance Developer India, Custom Software, Divine Imprints, Rajiv Book Binding House, Vellen Clothing, AI Chan, BitChat, Relm of Gods">
+  <meta name="description" content="MayankZen Studios is a premier digital development studio founded by Mayank. We engineer high-performance web applications, 3D interactive WebGL worlds, AI & automation systems, and custom software.">
+  <meta name="keywords" content="MayankZen Studios, Mayank Kumar, Web Development, Full Stack Developer, 3D WebGL Three.js, AI Automation, Freelance Developer India, Custom Software, Divine Imprints, Vibely Studio, Rajiv Book Binding House, Vellen Clothing, BitChat, Relm of Gods, AI Zen, Rakshak">
   <meta name="author" content="Mayank Kumar">
+  <meta name="publisher" content="MayankZen Studios">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+  <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+  <meta name="bingbot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
   <link rel="canonical" href="https://mayankzen.in/">
   <meta name="theme-color" content="#0a0e17">
+  <meta name="color-scheme" content="dark">
+  <meta name="application-name" content="MayankZen Studios">
+  <meta name="apple-mobile-web-app-title" content="MayankZen">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
@@ -20,7 +28,11 @@
   <meta property="og:title" content="MayankZen Studios | Where Code Meets Creativity">
   <meta property="og:description" content="We design, develop, and deliver immersive digital solutions. Explore innovative web apps, 3D worlds, AI agents, and request custom digital services.">
   <meta property="og:image" content="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="MayankZen Studios Digital Canvas Showcase">
   <meta property="og:site_name" content="MayankZen Studios">
+  <meta property="og:locale" content="en_US">
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
@@ -28,10 +40,18 @@
   <meta name="twitter:title" content="MayankZen Studios | Where Code Meets Creativity">
   <meta name="twitter:description" content="We design, develop, and deliver immersive digital solutions. Explore innovative web apps, 3D worlds, AI agents, and request custom digital services.">
   <meta name="twitter:image" content="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop">
+  <meta name="twitter:image:alt" content="MayankZen Studios Futuristic Web & AI Solutions">
+  <meta name="twitter:creator" content="@MAYANK198010">
 
+  <!-- Preconnect and DNS Prefetch for Peak Performance & Core Web Vitals -->
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+  <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="dns-prefetch" href="https://unpkg.com">
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="dns-prefetch" href="https://www.gstatic.com">
+  <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin>
+  <link rel="dns-prefetch" href="https://www.googletagmanager.com">
 
   <!-- Favicon & Site Icons -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
@@ -79,11 +99,15 @@
         "logo": "https://mayankzen.in/icon.png",
         "image": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop",
         "founder": { "@id": "https://mayankzen.in/#founder" },
-        "description": "Professional studio engineering high-performance Web Development, AI & Automation, 3D WebGL Three.js interactive graphics, and Custom Software Solutions.",
+        "description": "Premier digital studio engineering high-performance Web Development, AI & Automation, 3D WebGL Three.js interactive graphics, and Custom Software Solutions.",
         "telephone": "+919968198010",
         "email": "mayank198010@gmail.com",
         "priceRange": "₹₹",
         "openingHours": "Mo-Su 09:00-21:00",
+        "address": {
+          "@type": "PostalAddress",
+          "addressCountry": "IN"
+        },
         "hasOfferCatalog": {
           "@type": "OfferCatalog",
           "name": "Digital Development Services",
@@ -128,7 +152,12 @@
         "@id": "https://mayankzen.in/#website",
         "url": "https://mayankzen.in",
         "name": "MayankZen Studios",
-        "publisher": { "@id": "https://mayankzen.in/#organization" }
+        "publisher": { "@id": "https://mayankzen.in/#organization" },
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://mayankzen.in/?s={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
       },
       {
         "@type": "ItemList",
@@ -140,6 +169,16 @@
             "position": 1,
             "item": {
               "@type": "WebSite",
+              "name": "MayankZen Studios",
+              "url": "https://mayankzen.in",
+              "description": "Official portfolio platform with 3D WebGL city generator, service ticketing engine, and client communication dashboard."
+            }
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "item": {
+              "@type": "WebSite",
               "name": "Divine Imprints",
               "url": "https://divineimprints.in",
               "description": "Customized printing and corporate gifting platform offering custom prints, apparel branding, stationery, and personalized gift solutions."
@@ -147,7 +186,17 @@
           },
           {
             "@type": "ListItem",
-            "position": 2,
+            "position": 3,
+            "item": {
+              "@type": "WebSite",
+              "name": "Vibely Studio",
+              "url": "https://mayankzen.lovable.app/",
+              "description": "Creative digital design and modern web experience branch of MayankZen Studios delivering engaging interactive interfaces and brand aesthetics."
+            }
+          },
+          {
+            "@type": "ListItem",
+            "position": 4,
             "item": {
               "@type": "WebSite",
               "name": "Rajiv Book Binding House",
@@ -157,12 +206,57 @@
           },
           {
             "@type": "ListItem",
-            "position": 3,
+            "position": 5,
             "item": {
-              "@type": "WebSite",
-              "name": "MayankZen Studios",
-              "url": "https://mayankzen.in",
-              "description": "Official portfolio platform with 3D WebGL city generator, service ticketing engine, and client communication dashboard."
+              "@type": "SoftwareApplication",
+              "name": "Vellen",
+              "url": "https://mayankzen.in/#portfolio",
+              "applicationCategory": "E-Commerce",
+              "description": "Modern streetwear & bespoke apparel e-commerce web platform with lookbook showcase."
+            }
+          },
+          {
+            "@type": "ListItem",
+            "position": 6,
+            "item": {
+              "@type": "SoftwareApplication",
+              "name": "BitChat",
+              "url": "https://mayankzen.in/#portfolio",
+              "applicationCategory": "CommunicationApplication",
+              "description": "Real-time communication suite with instant messaging, media sharing, and channel synchronization."
+            }
+          },
+          {
+            "@type": "ListItem",
+            "position": 7,
+            "item": {
+              "@type": "SoftwareApplication",
+              "name": "Relm of Gods",
+              "url": "https://mayankzen.in/#portfolio",
+              "applicationCategory": "GameApplication",
+              "description": "Full 3D browser-based mythological battle arena game with custom character models and WebGL animations."
+            }
+          },
+          {
+            "@type": "ListItem",
+            "position": 8,
+            "item": {
+              "@type": "SoftwareApplication",
+              "name": "AI Zen",
+              "url": "https://mayankzen.in/#portfolio",
+              "applicationCategory": "UtilitiesApplication",
+              "description": "Virtual desktop AI assistant with natural language understanding, persona simulation, task tracking, and automated reminders."
+            }
+          },
+          {
+            "@type": "ListItem",
+            "position": 9,
+            "item": {
+              "@type": "SoftwareApplication",
+              "name": "Rakshak",
+              "url": "https://mayankzen.in/#portfolio",
+              "applicationCategory": "SafetyApplication",
+              "description": "Personal emergency safety application providing one-tap emergency SOS broadcast, live geolocation tracking, and camera recording."
             }
           }
         ]
@@ -213,18 +307,18 @@
 <body>
 
 <!-- Toast Notification Container -->
-<div id="toast-container"></div>
+<div id="toast-container" aria-live="polite" aria-atomic="true"></div>
 
 <!-- ===== NAVBAR ===== -->
 <header class="navbar">
   <div class="logo">
-    <a href="#home" class="logo-brand">
+    <a href="#home" class="logo-brand" aria-label="MayankZen Studios Homepage">
       <img src="/logo-icon.svg" alt="MayankZen Studios Emblem" class="brand-logo-img" width="40" height="40">
       <span class="brand-text">MayankZen <span class="brand-sub">Studio</span></span>
     </a>
   </div>
 
-  <nav>
+  <nav aria-label="Main Navigation">
     <ul id="navMenu">
       <li><a href="#home">Home</a></li>
       <li><a href="#about">About</a></li>
@@ -240,7 +334,7 @@
     </ul>
   </nav>
 
-  <button class="menu-toggle" id="menuBtn" aria-label="Toggle navigation menu">☰</button>
+  <button class="menu-toggle" id="menuBtn" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="navMenu">☰</button>
 </header>
 
 <!-- ===== HERO ===== -->
@@ -383,7 +477,18 @@
   </div>
 
   <div class="cards" id="portfolioGrid">
-    <!-- 1: Divine Imprints -->
+    <!-- 1: MayankZen Studios -->
+    <div class="card" data-category="web">
+      <span class="status completed"><i class="fa-solid fa-circle-check"></i> Live</span>
+      <h3>MayankZen Studios</h3>
+      <p>Official portfolio & interactive digital world showcase with Three.js 3D city scene, client portal, and real-time backend.</p>
+      <div class="card-actions">
+        <a href="https://mayankzen.in" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visit Website</a>
+        <button class="btn secondary btn-sm" onclick="openProjectModal('MayankZen Studios', 'Official portfolio platform with 3D WebGL city generator, service ticketing engine, and client communication dashboard.', 'Three.js, Vanilla JS, Firebase, Node.js Express', 'https://mayankzen.in')"><i class="fa-solid fa-eye"></i> Details</button>
+      </div>
+    </div>
+
+    <!-- 2: Divine Imprints -->
     <div class="card" data-category="web">
       <span class="status live"><i class="fa-solid fa-bolt"></i> Live</span>
       <h3>Divine Imprints</h3>
@@ -394,7 +499,18 @@
       </div>
     </div>
 
-    <!-- 2: Rajiv Book Binding House -->
+    <!-- 3: Vibely Studio -->
+    <div class="card" data-category="web">
+      <span class="status live"><i class="fa-solid fa-bolt"></i> Live</span>
+      <h3>Vibely Studio</h3>
+      <p>Creative digital design and modern web experience branch of MayankZen Studios delivering engaging interactive interfaces and brand aesthetics.</p>
+      <div class="card-actions">
+        <a href="https://mayankzen.lovable.app/" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visit Website</a>
+        <button class="btn secondary btn-sm" onclick="openProjectModal('Vibely Studio', 'A creative branch of MayankZen Studios dedicated to bespoke digital design, interactive user interfaces, and engaging modern web experiences.', 'Modern Web, Interactive UI, Lovable, Responsive Design', 'https://mayankzen.lovable.app/')"><i class="fa-solid fa-eye"></i> Details</button>
+      </div>
+    </div>
+
+    <!-- 4: Rajiv Book Binding House -->
     <div class="card" data-category="web">
       <span class="status live"><i class="fa-solid fa-bolt"></i> Live</span>
       <h3>Rajiv Book Binding House</h3>
@@ -405,18 +521,7 @@
       </div>
     </div>
 
-    <!-- 3: MayankZen Studios -->
-    <div class="card" data-category="web">
-      <span class="status completed"><i class="fa-solid fa-circle-check"></i> Completed</span>
-      <h3>MayankZen Studios</h3>
-      <p>Official portfolio & interactive digital world showcase with Three.js 3D city scene and real-time backend.</p>
-      <div class="card-actions">
-        <a href="https://mayankzen.in" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visit Website</a>
-        <button class="btn secondary btn-sm" onclick="openProjectModal('MayankZen Studios', 'Official portfolio platform with 3D WebGL city generator, service ticketing engine, and client communication dashboard.', 'Three.js, Vanilla JS, Firebase, Node.js Express', 'https://mayankzen.in')"><i class="fa-solid fa-eye"></i> Details</button>
-      </div>
-    </div>
-
-    <!-- 2: Vellen (Modern Clothing Brand) -->
+    <!-- 5: Vellen -->
     <div class="card" data-category="web">
       <span class="status live"><i class="fa-solid fa-bolt"></i> Live</span>
       <h3>Vellen</h3>
@@ -426,17 +531,7 @@
       </div>
     </div>
 
-    <!-- 3: AI Chan -->
-    <div class="card" data-category="ai">
-      <span class="status working"><i class="fa-solid fa-microchip"></i> Active Build</span>
-      <h3>AI Chan</h3>
-      <p>Virtual desktop assistant with friendly AI behaviour, voice synthesis, task scheduling, and intelligent responses.</p>
-      <div class="card-actions">
-        <button class="btn primary btn-sm" onclick="openProjectModal('AI Chan', 'Intelligent desktop assistant equipped with natural language understanding, persona simulation, task tracking, and automated reminders.', 'AI Engine, JavaScript, Speech Synthesis API', '#')"><i class="fa-solid fa-eye"></i> Details</button>
-      </div>
-    </div>
-
-    <!-- 4: BitChat -->
+    <!-- 6: BitChat -->
     <div class="card" data-category="web">
       <span class="status working"><i class="fa-solid fa-comments"></i> In Development</span>
       <h3>BitChat</h3>
@@ -446,23 +541,33 @@
       </div>
     </div>
 
-    <!-- 5: Rakshak -->
-    <div class="card" data-category="web">
-      <span class="status working"><i class="fa-solid fa-shield-halved"></i> Active Build</span>
-      <h3>Rakshak Emergency Safety</h3>
-      <p>Safety application that broadcasts live GPS coordinates, triggers emergency SOS alerts, and uploads real-time video feeds.</p>
-      <div class="card-actions">
-        <button class="btn primary btn-sm" onclick="openProjectModal('Rakshak', 'Emergency personal safety application providing one-tap emergency SOS broadcast, geolocation tracking, camera capture, and automated contact alerting.', 'Geolocation API, MediaRecorder, Firebase', '#')"><i class="fa-solid fa-eye"></i> Details</button>
-      </div>
-    </div>
-
-    <!-- 6: Relm of Gods -->
+    <!-- 7: Relm of Gods -->
     <div class="card" data-category="game">
       <span class="status working"><i class="fa-solid fa-dragon"></i> 3D In Progress</span>
       <h3>Relm of Gods</h3>
       <p>3D mythological action & arena combat game featuring procedural battle arenas, divine attributes, and real-time combat dynamics.</p>
       <div class="card-actions">
         <button class="btn primary btn-sm" onclick="openProjectModal('Relm of Gods', 'Full 3D browser-based mythological battle arena game with custom 3D character models, divine combat animations, and inventory management.', 'Three.js, WebGL, Web Audio API, JavaScript', '#')"><i class="fa-solid fa-eye"></i> Details</button>
+      </div>
+    </div>
+
+    <!-- 8: AI Zen -->
+    <div class="card" data-category="ai">
+      <span class="status working"><i class="fa-solid fa-microchip"></i> Active Build</span>
+      <h3>AI Zen</h3>
+      <p>Virtual desktop AI assistant with friendly behaviour, voice synthesis, task scheduling, and intelligent responses.</p>
+      <div class="card-actions">
+        <button class="btn primary btn-sm" onclick="openProjectModal('AI Zen', 'Intelligent desktop assistant equipped with natural language understanding, persona simulation, task tracking, and automated reminders.', 'AI Engine, JavaScript, Speech Synthesis API', '#')"><i class="fa-solid fa-eye"></i> Details</button>
+      </div>
+    </div>
+
+    <!-- 9: Rakshak -->
+    <div class="card" data-category="web">
+      <span class="status working"><i class="fa-solid fa-shield-halved"></i> Active Build</span>
+      <h3>Rakshak</h3>
+      <p>Personal emergency safety application that broadcasts live GPS coordinates, triggers SOS alerts, and captures real-time video feeds.</p>
+      <div class="card-actions">
+        <button class="btn primary btn-sm" onclick="openProjectModal('Rakshak', 'Emergency personal safety application providing one-tap emergency SOS broadcast, geolocation tracking, camera capture, and automated contact alerting.', 'Geolocation API, MediaRecorder, Firebase', '#')"><i class="fa-solid fa-eye"></i> Details</button>
       </div>
     </div>
   </div>

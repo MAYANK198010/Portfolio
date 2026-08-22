@@ -96,48 +96,72 @@ if (logoutBtn) {
   });
 }
 
-// Load All Requests
+// Load All Requests (Synchronized with Server Database, Firestore & Cache)
 async function loadRequests() {
   const tableBody = document.getElementById("requestsTable");
   if (!tableBody) return;
-  tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem;"><span class="loading"></span> Fetching requests...</td></tr>';
+  tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem;"><span class="loading"></span> Fetching requests from persistent database...</td></tr>';
 
   let requestsMap = new Map();
 
-  // Read local cached requests if any
+  // 1. Fetch from Persistent Server Database
+  try {
+    const res = await fetch('/api/db/requests');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data)) {
+        json.data.forEach(r => {
+          requestsMap.set(r.trackingId, { id: r.trackingId, ...r });
+        });
+      }
+    }
+  } catch (apiErr) {
+    console.debug("Server DB requests fetch notice:", apiErr);
+  }
+
+  // 2. Read local cached requests if any
   try {
     const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
     localList.forEach(r => {
-      requestsMap.set(r.trackingId, { id: 'local_' + r.trackingId, ...r });
+      if (!requestsMap.has(r.trackingId)) {
+        requestsMap.set(r.trackingId, { id: 'local_' + r.trackingId, ...r });
+      }
     });
   } catch (e) {
     console.warn("Local storage read error in admin:", e);
   }
 
+  // 3. Merge with Firestore if accessible
   try {
     const snapshot = await getDocs(collection(db, "service_requests"));
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
-      requestsMap.set(data.trackingId || docSnap.id, {
+      const tId = data.trackingId || docSnap.id;
+      const existing = requestsMap.get(tId) || {};
+      requestsMap.set(tId, {
         id: docSnap.id,
+        ...existing,
         ...data
       });
     });
   } catch (error) {
-    console.warn("Firestore admin query note:", error.message);
+    console.debug("Firestore requests sync note:", error?.message || error);
   }
 
   allRequests = Array.from(requestsMap.values());
 
   // Sort newest first
   allRequests.sort((a, b) => {
-    const timeA = a.timestamp?.seconds || new Date(a.createdAt || 0).getTime() / 1000;
-    const timeB = b.timestamp?.seconds || new Date(b.createdAt || 0).getTime() / 1000;
+    const timeA = a.timestamp?.seconds ? a.timestamp.seconds * 1000 : new Date(a.createdAt || 0).getTime();
+    const timeB = b.timestamp?.seconds ? b.timestamp.seconds * 1000 : new Date(b.createdAt || 0).getTime();
     return timeB - timeA;
   });
 
   renderMetricsAndCharts();
   renderTable(allRequests);
+
+  // Automatically refresh and synchronize user accounts with all loaded requests
+  loadUsers();
 }
 
 // Render Metrics and Charts
@@ -357,17 +381,33 @@ window.handleUpdateRequestSubmit = async function(event) {
   const status = document.getElementById('editReqStatus').value;
 
   try {
-    if (!id.startsWith('local_')) {
-      await updateDoc(doc(db, "service_requests", id), {
-        service,
-        budget,
-        status,
-        updatedAt: serverTimestamp()
+    // 1. Update in Persistent Server DB
+    try {
+      await fetch(`/api/db/requests/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ service, budget, status })
       });
+    } catch (apiErr) {
+      console.debug("Server DB update notice:", apiErr);
     }
 
-    // Update in local requests
-    const req = allRequests.find(r => r.id === id);
+    // 2. Update in Firestore
+    if (!id.startsWith('local_')) {
+      try {
+        await updateDoc(doc(db, "service_requests", id), {
+          service,
+          budget,
+          status,
+          updatedAt: serverTimestamp()
+        });
+      } catch (fsErr) {
+        console.debug("Firestore update note:", fsErr?.message || fsErr);
+      }
+    }
+
+    // 3. Update in local memory & cache
+    const req = allRequests.find(r => r.id === id || r.trackingId === id);
     if (req) {
       req.service = service;
       req.budget = budget;
@@ -469,17 +509,31 @@ window.closeAdminDetailModal = function() {
 window.deleteRequestRecord = async function(id) {
   if (!confirm("Are you sure you want to permanently delete this project request?")) return;
   try {
-    if (!id.startsWith('local_')) {
-      await deleteDoc(doc(db, "service_requests", id));
+    // 1. Delete from Server Database
+    try {
+      await fetch(`/api/db/requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    } catch (apiErr) {
+      console.debug("Server DB delete request error:", apiErr);
     }
+
+    // 2. Delete from Firestore
+    if (!id.startsWith('local_')) {
+      try {
+        await deleteDoc(doc(db, "service_requests", id));
+      } catch (fsErr) {
+        console.debug("Firestore delete request error:", fsErr?.message || fsErr);
+      }
+    }
+
+    // 3. Clear local storage cache
     try {
       const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
-      const filteredLocal = localList.filter(r => r.trackingId !== id && 'local_' + r.trackingId !== id);
+      const filteredLocal = localList.filter(r => r.trackingId !== id && 'local_' + r.trackingId !== id && r.id !== id);
       localStorage.setItem('mayankzen_local_requests', JSON.stringify(filteredLocal));
     } catch (le) {}
 
     showToast("Request record deleted.", "info");
-    allRequests = allRequests.filter(r => r.id !== id);
+    allRequests = allRequests.filter(r => r.id !== id && r.trackingId !== id);
     renderMetricsAndCharts();
     renderTable(allRequests);
   } catch (err) {
@@ -488,120 +542,370 @@ window.deleteRequestRecord = async function(id) {
   }
 };
 
-// Load and Manage Users
+// ==============================================
+// USER MANAGEMENT (DIVIDED: ADMINS VS CLIENTS)
+// ==============================================
+let currentUsersSubTab = 'all';
+
+window.switchUserSubTab = function(subTab) {
+  currentUsersSubTab = subTab;
+  
+  // Update button active states
+  const btnAll = document.getElementById('userSubTabAll');
+  const btnAdmins = document.getElementById('userSubTabAdmins');
+  const btnClients = document.getElementById('userSubTabClients');
+
+  if (btnAll) btnAll.className = subTab === 'all' ? 'btn primary btn-sm active' : 'btn secondary btn-sm';
+  if (btnAdmins) btnAdmins.className = subTab === 'admins' ? 'btn primary btn-sm active' : 'btn secondary btn-sm';
+  if (btnClients) btnClients.className = subTab === 'clients' ? 'btn primary btn-sm active' : 'btn secondary btn-sm';
+
+  const adminSec = document.getElementById('adminUsersSection');
+  const clientSec = document.getElementById('clientUsersSection');
+
+  if (adminSec) adminSec.style.display = (subTab === 'all' || subTab === 'admins') ? 'block' : 'none';
+  if (clientSec) clientSec.style.display = (subTab === 'all' || subTab === 'clients') ? 'block' : 'none';
+};
+
+// Load and Manage Users from Server Database & Cloud
 window.loadUsers = async function() {
-  const usersTable = document.getElementById("usersTable");
-  if (!usersTable) return;
-  usersTable.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem;"><span class="loading"></span> Fetching user accounts...</td></tr>';
+  const adminTableBody = document.getElementById("adminUsersTable");
+  const clientTableBody = document.getElementById("clientUsersTable");
+
+  if (adminTableBody) {
+    adminTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem;"><span class="loading"></span> Loading administrator accounts...</td></tr>';
+  }
+  if (clientTableBody) {
+    clientTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem;"><span class="loading"></span> Loading client accounts...</td></tr>';
+  }
 
   let usersMap = new Map();
 
-  // Add master admin users by default
-  usersMap.set('master_admin_main', {
-    id: 'master_admin_main',
-    name: 'Studio Admin',
-    email: 'admin@mayankzen.in',
-    role: 'admin',
-    createdAt: 'Primary Admin'
-  });
+  // 1. Fetch all users from Persistent Server Database
+  try {
+    const res = await fetch('/api/db/users');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data)) {
+        json.data.forEach(u => {
+          const key = (u.email || u.id).toLowerCase();
+          usersMap.set(key, u);
+        });
+      }
+    }
+  } catch (apiErr) {
+    console.debug("Server DB users fetch notice:", apiErr);
+  }
 
-  usersMap.set('master_founder', {
-    id: 'master_founder',
-    name: 'Mayank (Founder)',
-    email: 'mayank198010@gmail.com',
-    role: 'admin',
-    createdAt: 'Master Account'
-  });
+  // 2. Add default masters
+  if (!usersMap.has('admin@mayankzen.in')) {
+    usersMap.set('admin@mayankzen.in', {
+      id: 'master_admin_main',
+      name: 'Studio Admin',
+      email: 'admin@mayankzen.in',
+      role: 'admin',
+      isMaster: true,
+      createdAt: 'Primary Admin'
+    });
+  }
+  if (!usersMap.has('mayank198010@gmail.com')) {
+    usersMap.set('mayank198010@gmail.com', {
+      id: 'master_founder',
+      name: 'Mayank (Founder)',
+      email: 'mayank198010@gmail.com',
+      role: 'admin',
+      isMaster: true,
+      createdAt: 'Master Account'
+    });
+  }
 
+  // 3. Merge with Firestore users
   try {
     const snapshot = await getDocs(collection(db, "users"));
     snapshot.forEach(docSnap => {
       const data = docSnap.data();
-      usersMap.set(docSnap.id, {
+      const key = (data.email || docSnap.id).toLowerCase();
+      const existing = usersMap.get(key) || {};
+      usersMap.set(key, {
         id: docSnap.id,
+        ...existing,
         ...data
       });
     });
   } catch (error) {
-    console.warn("Firestore users query notice:", error.message);
+    console.debug("Firestore users query notice:", error?.message || error);
   }
+
+  // 4. Merge all clients from all loaded requests and local storage
+  const requestSources = [...(allRequests || [])];
+  try {
+    const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
+    localList.forEach(r => {
+      if (!requestSources.some(existing => existing.trackingId === r.trackingId)) {
+        requestSources.push(r);
+      }
+    });
+  } catch (e) {}
+
+  requestSources.forEach(req => {
+    if (req.email) {
+      const emailLower = req.email.toLowerCase().trim();
+      const isMaster = emailLower === 'admin@mayankzen.in' || emailLower === 'mayank198010@gmail.com';
+      if (!usersMap.has(emailLower)) {
+        const clientUserObj = {
+          id: req.id || ('client_' + emailLower.replace(/[^a-zA-Z0-9]/g, '_')),
+          name: req.name || emailLower.split('@')[0] || 'Client User',
+          email: req.email,
+          mobile: req.mobile || '',
+          role: isMaster ? 'admin' : 'user',
+          isMaster: isMaster,
+          createdAt: req.createdAt || 'Recent Client'
+        };
+        usersMap.set(emailLower, clientUserObj);
+
+        // Auto-persist client user to persistent server database
+        fetch('/api/db/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(clientUserObj)
+        }).catch(err => console.debug('Sync client user error:', err));
+      }
+    }
+  });
+
+  // Calculate accurate request count for every user
+  usersMap.forEach((userObj, key) => {
+    const emailLower = (userObj.email || key).toLowerCase().trim();
+    const count = requestSources.filter(r => (r.email || '').toLowerCase().trim() === emailLower).length;
+    userObj.requestCount = count;
+  });
 
   allUsers = Array.from(usersMap.values());
-  renderUsersTable(allUsers);
+  renderUsersTables(allUsers);
 };
 
-function renderUsersTable(users) {
-  const tableBody = document.getElementById("usersTable");
-  if (!tableBody) return;
+function renderUsersTables(users) {
+  const adminTableBody = document.getElementById("adminUsersTable");
+  const clientTableBody = document.getElementById("clientUsersTable");
+  
+  const adminUsers = users.filter(u => {
+    const emailLower = (u.email || '').toLowerCase();
+    return u.role === 'admin' || emailLower === 'admin@mayankzen.in' || emailLower === 'mayank198010@gmail.com';
+  });
 
-  if (users.length === 0) {
-    tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-secondary);">No user accounts found.</td></tr>';
-    return;
+  const clientUsers = users.filter(u => {
+    const emailLower = (u.email || '').toLowerCase();
+    return u.role !== 'admin' && emailLower !== 'admin@mayankzen.in' && emailLower !== 'mayank198010@gmail.com';
+  });
+
+  // Update counters in UI
+  const totalCountEl = document.getElementById('totalUsersCountBadge');
+  const adminCountEl = document.getElementById('adminUsersCountBadge');
+  const clientCountEl = document.getElementById('clientUsersCountBadge');
+  const adminHeaderCount = document.getElementById('adminUsersHeaderCount');
+  const clientHeaderCount = document.getElementById('clientUsersHeaderCount');
+
+  if (totalCountEl) totalCountEl.textContent = users.length;
+  if (adminCountEl) adminCountEl.textContent = adminUsers.length;
+  if (clientCountEl) clientCountEl.textContent = clientUsers.length;
+  if (adminHeaderCount) adminHeaderCount.textContent = adminUsers.length;
+  if (clientHeaderCount) clientHeaderCount.textContent = clientUsers.length;
+
+  // --- Render Admin Table ---
+  if (adminTableBody) {
+    if (adminUsers.length === 0) {
+      adminTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-secondary);">No administrator accounts found.</td></tr>';
+    } else {
+      adminTableBody.innerHTML = '';
+      adminUsers.forEach(u => {
+        const row = document.createElement("tr");
+        const emailLower = (u.email || '').toLowerCase();
+        const isMaster = emailLower === 'admin@mayankzen.in' || emailLower === 'mayank198010@gmail.com';
+        const dateStr = u.createdAt?.seconds ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : (typeof u.createdAt === 'string' ? u.createdAt : 'Permanent');
+
+        row.innerHTML = `
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #fbbf24, #d97706); display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000; box-shadow: 0 0 10px rgba(251, 191, 36, 0.4);">
+                <i class="fa-solid fa-crown" style="font-size: 0.9rem;"></i>
+              </div>
+              <div>
+                <strong style="color: white; font-size: 0.95rem;">${u.name || 'Admin'}</strong>
+                ${isMaster ? '<span style="display: block; font-size: 0.75rem; color: #fbbf24; font-weight: 600;">Founder & Master Access</span>' : '<span style="display: block; font-size: 0.75rem; color: var(--text-secondary);">Operations Admin</span>'}
+              </div>
+            </div>
+          </td>
+          <td style="color: #f1f5f9; font-weight: 500;">${u.email || 'N/A'}</td>
+          <td>
+            <span class="status completed" style="margin-bottom: 0; background: rgba(251, 191, 36, 0.15); color: #fbbf24; border-color: rgba(251, 191, 36, 0.4);">
+              <i class="fa-solid fa-shield-halved"></i> ${isMaster ? 'Master Founder' : 'Administrator'}
+            </span>
+          </td>
+          <td style="color: var(--text-secondary); font-size: 0.85rem;">${dateStr}</td>
+          <td>
+            ${isMaster ? '<span style="color: #64748b; font-size: 0.8rem; font-style: italic;"><i class="fa-solid fa-lock"></i> Permanent Master</span>' : `
+              <div style="display: flex; gap: 0.4rem;">
+                <button class="btn secondary btn-sm" onclick="toggleUserRole('${u.id || u.email}', 'admin')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; border-color: #f59e0b; color: #f59e0b;" title="Demote to client role">
+                  <i class="fa-solid fa-arrow-down"></i> Set Client
+                </button>
+                <button class="btn secondary btn-sm" onclick="deleteUserAccount('${u.id || u.email}')" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-color: #ef4444; color: #ef4444;" title="Delete user">
+                  <i class="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            `}
+          </td>
+        `;
+        adminTableBody.appendChild(row);
+      });
+    }
   }
 
-  tableBody.innerHTML = '';
-  users.forEach(u => {
-    const row = document.createElement("tr");
-    const emailLower = (u.email || '').toLowerCase();
-    const isMaster = emailLower === 'admin@mayankzen.in' || emailLower === 'mayank198010@gmail.com';
-    const isAdmin = u.role === 'admin' || isMaster;
-    const dateStr = u.createdAt?.seconds ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : (typeof u.createdAt === 'string' ? u.createdAt : 'Recent');
+  // --- Render Client Table ---
+  if (clientTableBody) {
+    if (clientUsers.length === 0) {
+      clientTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-secondary);">No client accounts registered yet.</td></tr>';
+    } else {
+      clientTableBody.innerHTML = '';
+      clientUsers.forEach(u => {
+        const row = document.createElement("tr");
+        const dateStr = u.createdAt?.seconds ? new Date(u.createdAt.seconds * 1000).toLocaleDateString() : (typeof u.createdAt === 'string' ? u.createdAt : 'Recent');
+        const reqCount = u.requestCount !== undefined ? u.requestCount : allRequests.filter(r => (r.email || '').toLowerCase() === (u.email || '').toLowerCase()).length;
 
-    row.innerHTML = `
-      <td>
-        <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <div style="width: 34px; height: 34px; border-radius: 50%; background: ${isAdmin ? 'linear-gradient(135deg, #10b981, #047857)' : 'rgba(139,92,246,0.2)'}; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white;">
-            ${(u.name || u.email || 'U').charAt(0).toUpperCase()}
-          </div>
-          <div>
-            <strong style="color: white;">${u.name || 'User'}</strong>
-            ${isMaster ? '<span style="font-size: 0.7rem; color: var(--accent-green); margin-left: 0.35rem;">(Master Admin)</span>' : ''}
-          </div>
-        </div>
-      </td>
-      <td style="color: #cbd5e1;">${u.email || 'N/A'}</td>
-      <td>
-        <span class="status ${isAdmin ? 'completed' : 'pending'}" style="margin-bottom: 0;">
-          ${isAdmin ? '<i class="fa-solid fa-crown"></i> Admin' : '<i class="fa-solid fa-user"></i> Client'}
-        </span>
-      </td>
-      <td style="color: var(--text-secondary); font-size: 0.9rem;">${dateStr}</td>
-      <td>
-        ${isMaster ? '<span style="color: var(--text-secondary); font-size: 0.85rem;">Protected</span>' : `
-          <button class="btn secondary btn-sm" onclick="toggleUserRole('${u.id}', '${u.role || 'user'}')" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;">
-            ${isAdmin ? '<i class="fa-solid fa-arrow-down"></i> Set Client' : '<i class="fa-solid fa-arrow-up"></i> Make Admin'}
-          </button>
-        `}
-      </td>
-    `;
-    tableBody.appendChild(row);
-  });
+        row.innerHTML = `
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+              <div style="width: 36px; height: 36px; border-radius: 50%; background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); display: flex; align-items: center; justify-content: center; font-weight: bold; color: var(--accent-green);">
+                ${(u.name || u.email || 'C').charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <strong style="color: white; font-size: 0.95rem;">${u.name || 'Client User'}</strong>
+                <span style="display: block; font-size: 0.75rem; color: var(--text-secondary);">Registered Client</span>
+              </div>
+            </div>
+          </td>
+          <td style="color: #cbd5e1;">${u.email || 'N/A'}</td>
+          <td>
+            <span class="status ${reqCount > 0 ? 'completed' : 'pending'}" style="margin-bottom: 0;">
+              <i class="fa-solid fa-diagram-project"></i> ${reqCount} ${reqCount === 1 ? 'Request' : 'Requests'}
+            </span>
+          </td>
+          <td style="color: var(--text-secondary); font-size: 0.85rem;">${dateStr}</td>
+          <td>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <button class="btn secondary btn-sm" onclick="toggleUserRole('${u.id || u.email}', 'user')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; border-color: #fbbf24; color: #fbbf24;" title="Promote to admin role">
+                <i class="fa-solid fa-crown"></i> Make Admin
+              </button>
+              ${reqCount > 0 ? `
+                <button class="btn secondary btn-sm" onclick="filterClientRequests('${u.email}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;" title="View all requests submitted by this client">
+                  <i class="fa-solid fa-eye"></i> Requests
+                </button>
+              ` : ''}
+              <button class="btn secondary btn-sm" onclick="deleteUserAccount('${u.id || u.email}')" style="padding: 0.3rem 0.5rem; font-size: 0.75rem; border-color: #ef4444; color: #ef4444;" title="Delete user">
+                <i class="fa-solid fa-trash"></i>
+              </button>
+            </div>
+          </td>
+        `;
+        clientTableBody.appendChild(row);
+      });
+    }
+  }
 }
 
 window.filterUsersTable = function() {
-  const searchTerm = document.getElementById("userSearchInput")?.value.toLowerCase() || '';
+  const searchTerm = document.getElementById("userSearchInput")?.value.toLowerCase().trim() || '';
+  if (!searchTerm) {
+    renderUsersTables(allUsers);
+    return;
+  }
   const filtered = allUsers.filter(u => 
     (u.name && u.name.toLowerCase().includes(searchTerm)) ||
     (u.email && u.email.toLowerCase().includes(searchTerm)) ||
     (u.role && u.role.toLowerCase().includes(searchTerm))
   );
-  renderUsersTable(filtered);
+  renderUsersTables(filtered);
 };
 
-window.toggleUserRole = async function(userId, currentRole) {
+window.filterClientRequests = function(email) {
+  if (!email) return;
+  switchAdminTab('requests');
+  const searchInput = document.getElementById('requestSearchInput') || document.getElementById('searchInput');
+  if (searchInput) {
+    searchInput.value = email;
+    filterTable();
+  }
+};
+
+window.toggleUserRole = async function(userIdentifier, currentRole) {
   const newRole = currentRole === 'admin' ? 'user' : 'admin';
+
   try {
-    await updateDoc(doc(db, "users", userId), {
-      role: newRole,
-      updatedAt: serverTimestamp()
-    });
-    showToast(`User role updated to "${newRole}"`, 'success');
-    const u = allUsers.find(user => user.id === userId);
-    if (u) u.role = newRole;
-    renderUsersTable(allUsers);
+    // 1. Update in Persistent Server DB
+    try {
+      const res = await fetch(`/api/db/users/${encodeURIComponent(userIdentifier)}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole })
+      });
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.message || 'Server DB role update failed');
+      }
+    } catch (apiErr) {
+      console.debug("Server DB role update notice:", apiErr);
+    }
+
+    // 2. Update Firestore if accessible
+    try {
+      if (!userIdentifier.startsWith('usr_') && !userIdentifier.startsWith('client_') && !userIdentifier.includes('@')) {
+        await updateDoc(doc(db, "users", userIdentifier), {
+          role: newRole,
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (fsErr) {
+      console.debug("Firestore update role notice:", fsErr?.message || fsErr);
+    }
+
+    // 3. Update in local array
+    const u = allUsers.find(user => user.id === userIdentifier || user.email === userIdentifier);
+    if (u) {
+      u.role = newRole;
+    }
+
+    showToast(`User role successfully changed to "${newRole.toUpperCase()}"`, 'success');
+    renderUsersTables(allUsers);
   } catch (err) {
     console.error("Toggle role error:", err);
     showToast("Failed to change user role: " + err.message, "error");
+  }
+};
+
+window.deleteUserAccount = async function(userIdentifier) {
+  if (!confirm(`Are you sure you want to delete user account "${userIdentifier}"?`)) return;
+
+  try {
+    // 1. Delete from Server DB
+    try {
+      await fetch(`/api/db/users/${encodeURIComponent(userIdentifier)}`, { method: 'DELETE' });
+    } catch (apiErr) {
+      console.debug("Server DB delete user error:", apiErr);
+    }
+
+    // 2. Delete from Firestore if accessible
+    try {
+      if (!userIdentifier.startsWith('usr_') && !userIdentifier.startsWith('client_') && !userIdentifier.includes('@')) {
+        await deleteDoc(doc(db, "users", userIdentifier));
+      }
+    } catch (fsErr) {
+      console.debug("Firestore delete user notice:", fsErr?.message || fsErr);
+    }
+
+    allUsers = allUsers.filter(u => u.id !== userIdentifier && u.email !== userIdentifier);
+    renderUsersTables(allUsers);
+    showToast("User account removed.", "info");
+  } catch (err) {
+    console.error("Delete user error:", err);
+    showToast("Failed to delete user: " + err.message, "error");
   }
 };
 
@@ -642,15 +946,8 @@ async function loadApprovedAdmins() {
   const container = document.getElementById('adminsList');
   if (!container) return;
 
-  // Retrieve cached local admins
-  let localAdmins = [];
-  try {
-    localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
-  } catch (e) {
-    localAdmins = [];
-  }
-
   const adminsMap = new Map();
+
   // Always include primary master admin & founder
   adminsMap.set('admin@mayankzen.in', {
     id: 'master_admin_main',
@@ -666,7 +963,37 @@ async function loadApprovedAdmins() {
     source: 'system'
   });
 
-  // Populate local admins
+  // 1. Fetch from Server DB
+  try {
+    const res = await fetch('/api/db/admins');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data)) {
+        json.data.forEach(a => {
+          const email = typeof a === 'string' ? a : a.email;
+          if (email) {
+            adminsMap.set(email.toLowerCase(), {
+              id: 'srv_' + email,
+              email,
+              isMaster: email.toLowerCase() === 'mayank198010@gmail.com' || email.toLowerCase() === 'admin@mayankzen.in',
+              source: 'server_db'
+            });
+          }
+        });
+      }
+    }
+  } catch (apiErr) {
+    console.debug("Server DB admins fetch notice:", apiErr);
+  }
+
+  // 2. Retrieve cached local admins
+  let localAdmins = [];
+  try {
+    localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
+  } catch (e) {
+    localAdmins = [];
+  }
+
   localAdmins.forEach(item => {
     const email = typeof item === 'string' ? item : item.email;
     if (email && !adminsMap.has(email.toLowerCase())) {
@@ -679,6 +1006,7 @@ async function loadApprovedAdmins() {
     }
   });
 
+  // 3. Firestore query
   try {
     const snapshot = await getDocs(collection(db, "approvedAdmins"));
     snapshot.forEach(docSnap => {
@@ -687,13 +1015,13 @@ async function loadApprovedAdmins() {
         adminsMap.set(data.email.toLowerCase(), {
           id: docSnap.id,
           email: data.email,
-          isMaster: data.email.toLowerCase() === 'mayank198010@gmail.com',
+          isMaster: data.email.toLowerCase() === 'mayank198010@gmail.com' || data.email.toLowerCase() === 'admin@mayankzen.in',
           source: 'cloud'
         });
       }
     });
   } catch (err) {
-    console.debug("Remote approvedAdmins query note (using local cache & user management):", err?.message || err);
+    console.debug("Remote approvedAdmins query note:", err?.message || err);
   }
 
   const adminsList = Array.from(adminsMap.values());
@@ -728,7 +1056,24 @@ window.addApprovedAdmin = async function() {
     return;
   }
 
-  // Save to local storage cache immediately
+  // 1. Add to Server DB
+  try {
+    await fetch('/api/db/admins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    // Also promote in users table
+    await fetch(`/api/db/users/${encodeURIComponent(email)}/role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'admin' })
+    });
+  } catch (apiErr) {
+    console.debug("Server DB add admin error:", apiErr);
+  }
+
+  // 2. Save to local storage cache immediately
   try {
     const localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
     if (!localAdmins.some(a => (typeof a === 'string' ? a : a.email).toLowerCase() === email)) {
@@ -737,7 +1082,7 @@ window.addApprovedAdmin = async function() {
     }
   } catch (e) {}
 
-  // Attempt Firestore remote add
+  // 3. Attempt Firestore remote add
   try {
     await addDoc(collection(db, "approvedAdmins"), {
       email,
@@ -745,18 +1090,31 @@ window.addApprovedAdmin = async function() {
       addedBy: currentAdminUser?.email || 'master'
     });
   } catch (err) {
-    console.debug("Approved admins remote save note (cached locally):", err?.message || err);
+    console.debug("Approved admins remote save note:", err?.message || err);
   }
 
   showToast(`Granted admin rights to ${email}`, 'success');
   if (input) input.value = '';
   loadApprovedAdmins();
+  loadUsers();
 };
 
 window.removeApprovedAdmin = async function(id, email) {
   if (!confirm(`Revoke admin rights for ${email || 'this account'}?`)) return;
 
-  // Remove from local cache
+  // 1. Remove from Server DB
+  try {
+    await fetch(`/api/db/admins/${encodeURIComponent(email)}`, { method: 'DELETE' });
+    await fetch(`/api/db/users/${encodeURIComponent(email)}/role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'user' })
+    });
+  } catch (apiErr) {
+    console.debug("Server DB remove admin error:", apiErr);
+  }
+
+  // 2. Remove from local cache
   try {
     const localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
     const filtered = localAdmins.filter(a => {
@@ -767,8 +1125,8 @@ window.removeApprovedAdmin = async function(id, email) {
     localStorage.setItem('mayankzen_approved_admins', JSON.stringify(filtered));
   } catch (e) {}
 
-  // Attempt Firestore remote delete
-  if (id && !id.startsWith('local_')) {
+  // 3. Attempt Firestore remote delete
+  if (id && !id.startsWith('local_') && !id.startsWith('srv_')) {
     try {
       await deleteDoc(doc(db, "approvedAdmins", id));
     } catch (err) {
@@ -778,6 +1136,7 @@ window.removeApprovedAdmin = async function(id, email) {
 
   showToast("Admin access revoked.", "info");
   loadApprovedAdmins();
+  loadUsers();
 };
 
 // Export Requests to CSV

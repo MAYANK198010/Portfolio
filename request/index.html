@@ -130,31 +130,35 @@
 
   <!-- Form Submission State / Container -->
   <form id="serviceForm">
-    <div class="form-group">
-      <label for="name"><i class="fa-solid fa-user"></i> Full Name *</label>
-      <input type="text" id="name" placeholder="Your Name or Studio" required>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label for="name"><i class="fa-solid fa-user"></i> Full Name *</label>
+        <input type="text" id="name" placeholder="Your Name or Studio" required>
+      </div>
+
+      <div class="form-group">
+        <label for="email"><i class="fa-solid fa-envelope"></i> Email Address *</label>
+        <input type="email" id="email" placeholder="client@example.com" required>
+      </div>
     </div>
 
-    <div class="form-group">
-      <label for="email"><i class="fa-solid fa-envelope"></i> Email Address *</label>
-      <input type="email" id="email" placeholder="client@example.com" required>
-    </div>
+    <div class="form-grid-2">
+      <div class="form-group">
+        <label for="mobile"><i class="fa-solid fa-phone"></i> Mobile / WhatsApp *</label>
+        <input type="tel" id="mobile" placeholder="+91 9968198010" required>
+      </div>
 
-    <div class="form-group">
-      <label for="mobile"><i class="fa-solid fa-phone"></i> Mobile / WhatsApp *</label>
-      <input type="tel" id="mobile" placeholder="+91 9968198010" required>
-    </div>
-
-    <div class="form-group">
-      <label for="service"><i class="fa-solid fa-laptop-code"></i> Service Category *</label>
-      <select id="service" required>
-        <option value="" disabled selected>Select a Service</option>
-        <option value="Web Development">Web Development (Frontend, Full-Stack, Landing Page)</option>
-        <option value="AI & Automation">AI & Automation (Bots, Agents, Workflows)</option>
-        <option value="3D WebGL & Three.js">3D WebGL & Three.js Interactive Experiences</option>
-        <option value="Custom Software">Custom Software / Backend API Solution</option>
-        <option value="Researched Content">Researched Technical Content</option>
-      </select>
+      <div class="form-group">
+        <label for="service"><i class="fa-solid fa-laptop-code"></i> Service Category *</label>
+        <select id="service" required>
+          <option value="" disabled selected>Select a Service</option>
+          <option value="Web Development">Web Development (Frontend, Full-Stack, Landing Page)</option>
+          <option value="AI & Automation">AI & Automation (Bots, Agents, Workflows)</option>
+          <option value="3D WebGL & Three.js">3D WebGL & Three.js Interactive Experiences</option>
+          <option value="Custom Software">Custom Software / Backend API Solution</option>
+          <option value="Researched Content">Researched Technical Content</option>
+        </select>
+      </div>
     </div>
 
     <div class="form-group">
@@ -454,7 +458,34 @@
         console.warn('Could not cache request locally:', e);
       }
 
-      // 2. Try Firestore write with auto guest authentication
+      // 2. Save directly to Persistent Server DB (ensuring data survives logout & across all sessions)
+      try {
+        await fetch('/api/db/requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload)
+        });
+
+        // Also ensure client user is registered in persistent database
+        if (email) {
+          await fetch('/api/db/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: 'client_' + email.replace(/[^a-zA-Z0-9]/g, '_'),
+              name: name || 'Client User',
+              email: email,
+              role: 'user',
+              mobile: mobile || '',
+              createdAt: new Date().toISOString()
+            })
+          });
+        }
+      } catch (srvErr) {
+        console.debug('Server DB sync note:', srvErr);
+      }
+
+      // 3. Try Firestore write with auto guest authentication
       try {
         if (!auth.currentUser) {
           try {
