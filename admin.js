@@ -37,14 +37,39 @@ async function isApprovedAdmin(user) {
   const email = user.email.toLowerCase().trim();
   if (email === 'admin@mayankzen.in' || email === 'mayank198010@gmail.com') return true;
 
-  // Check local approved admins list
+  // 1. Check local approved admins list
   try {
     const localAdmins = JSON.parse(localStorage.getItem('mayankzen_approved_admins') || '[]');
     if (localAdmins.some(a => (typeof a === 'string' ? a : a.email).toLowerCase() === email)) {
       return true;
     }
   } catch (e) {}
+
+  // 2. Check Server Database approved admins
+  try {
+    const res = await fetch('/api/db/admins');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data && Array.isArray(json.data)) {
+        if (json.data.some(a => (typeof a === 'string' ? a : a.email).toLowerCase() === email)) {
+          return true;
+        }
+      }
+    }
+  } catch (e) {}
+
+  // 3. Check Server Database user account role
+  try {
+    const res = await fetch(`/api/db/users/${encodeURIComponent(email)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data && (json.data.role === 'admin' || json.data.isMaster)) {
+        return true;
+      }
+    }
+  } catch (e) {}
   
+  // 4. Check Firestore if available
   try {
     const userDoc = await getDoc(doc(db, "users", user.uid));
     if (userDoc.exists() && userDoc.data().role === 'admin') return true;
@@ -84,6 +109,16 @@ onAuthStateChanged(auth, async (user) => {
   loadRequests();
   loadUsers();
   loadApprovedAdmins();
+
+  // Setup live cross-device sync polling (every 4 seconds)
+  if (!window.adminPollTimer) {
+    window.adminPollTimer = setInterval(() => {
+      if (currentAdminUser) {
+        loadRequests(true);
+        loadUsers(true);
+      }
+    }, 4000);
+  }
 });
 
 // Logout Handler
@@ -91,20 +126,23 @@ const logoutBtn = document.getElementById('adminLogoutBtn');
 if (logoutBtn) {
   logoutBtn.addEventListener('click', async (e) => {
     e.preventDefault();
+    if (window.adminPollTimer) clearInterval(window.adminPollTimer);
     await signOut(auth);
     window.location.href = '/login/';
   });
 }
 
 // Load All Requests (Synchronized with Server Database, Firestore & Cache)
-async function loadRequests() {
+async function loadRequests(silent = false) {
   const tableBody = document.getElementById("requestsTable");
   if (!tableBody) return;
-  tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem;"><span class="loading"></span> Fetching requests from persistent database...</td></tr>';
+  if (!silent) {
+    tableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:2rem;"><span class="loading"></span> Fetching requests from persistent database...</td></tr>';
+  }
 
   let requestsMap = new Map();
 
-  // 1. Fetch from Persistent Server Database
+  // 1. Fetch from Persistent Server Database (primary source across devices)
   try {
     const res = await fetch('/api/db/requests');
     if (res.ok) {
@@ -148,6 +186,7 @@ async function loadRequests() {
     console.debug("Firestore requests sync note:", error?.message || error);
   }
 
+  const previousCount = allRequests.length;
   allRequests = Array.from(requestsMap.values());
 
   // Sort newest first
@@ -157,11 +196,23 @@ async function loadRequests() {
     return timeB - timeA;
   });
 
-  renderMetricsAndCharts();
-  renderTable(allRequests);
+  // Only avoid re-render if silent and search box is actively typed in
+  const searchInput = document.getElementById("requestSearchInput");
+  const isSearching = searchInput && document.activeElement === searchInput;
+  if (!isSearching) {
+    renderMetricsAndCharts();
+    filterTable();
+  }
 
-  // Automatically refresh and synchronize user accounts with all loaded requests
-  loadUsers();
+  // If new requests arrived while in silent polling, notify admin
+  if (silent && previousCount > 0 && allRequests.length > previousCount) {
+    showToast(`🔔 New project request received! Total: ${allRequests.length}`, 'info');
+  }
+
+  // Synchronize users if not already silent
+  if (!silent) {
+    loadUsers(true);
+  }
 }
 
 // Render Metrics and Charts
@@ -302,18 +353,37 @@ function renderTable(requests) {
     select.addEventListener("change", async (e) => {
       const id = e.target.dataset.id;
       const newStatus = e.target.value;
+      const reqObj = allRequests.find(r => r.id === id || r.trackingId === id);
+      const targetKey = (reqObj && reqObj.trackingId) ? reqObj.trackingId : id;
+
       try {
-        if (!id.startsWith('local_')) {
-          await updateDoc(doc(db, "service_requests", id), {
-            status: newStatus,
-            updatedAt: serverTimestamp()
+        // 1. Update Persistent Server DB (primary cross-device store)
+        try {
+          await fetch(`/api/db/requests/${encodeURIComponent(targetKey)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus })
           });
+        } catch (apiErr) {
+          console.debug("Server DB status update note:", apiErr);
+        }
+
+        // 2. Update Firestore if accessible
+        if (!id.startsWith('local_')) {
+          try {
+            await updateDoc(doc(db, "service_requests", id), {
+              status: newStatus,
+              updatedAt: serverTimestamp()
+            });
+          } catch (fsErr) {
+            console.debug("Firestore status sync note:", fsErr?.message || fsErr);
+          }
         }
         
-        // Update local storage cache
+        // 3. Update local storage cache
         try {
           const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
-          const match = localList.find(r => r.trackingId === id || 'local_' + r.trackingId === id);
+          const match = localList.find(r => r.trackingId === targetKey || 'local_' + r.trackingId === id);
           if (match) {
             match.status = newStatus;
             localStorage.setItem('mayankzen_local_requests', JSON.stringify(localList));
@@ -325,8 +395,7 @@ function renderTable(requests) {
         showToast(`Status updated to "${newStatus}"`, 'success');
         
         // Update local dataset and recalculate metrics
-        const req = allRequests.find(r => r.id === id);
-        if (req) req.status = newStatus;
+        if (reqObj) reqObj.status = newStatus;
         renderMetricsAndCharts();
       } catch (err) {
         console.error("Status update error:", err);
@@ -376,14 +445,15 @@ window.closeAdminEditModal = function() {
 window.handleUpdateRequestSubmit = async function(event) {
   event.preventDefault();
   const id = document.getElementById('editReqDocId').value;
+  const trackingId = document.getElementById('editReqTrackingId').value || id;
   const service = document.getElementById('editReqService').value;
   const budget = Number(document.getElementById('editReqBudget').value) || 0;
   const status = document.getElementById('editReqStatus').value;
 
   try {
-    // 1. Update in Persistent Server DB
+    // 1. Update in Persistent Server DB (using trackingId)
     try {
-      await fetch(`/api/db/requests/${encodeURIComponent(id)}`, {
+      await fetch(`/api/db/requests/${encodeURIComponent(trackingId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ service, budget, status })
@@ -407,7 +477,7 @@ window.handleUpdateRequestSubmit = async function(event) {
     }
 
     // 3. Update in local memory & cache
-    const req = allRequests.find(r => r.id === id || r.trackingId === id);
+    const req = allRequests.find(r => r.id === id || r.trackingId === trackingId);
     if (req) {
       req.service = service;
       req.budget = budget;
@@ -416,7 +486,7 @@ window.handleUpdateRequestSubmit = async function(event) {
 
     try {
       const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
-      const match = localList.find(r => r.trackingId === id || 'local_' + r.trackingId === id);
+      const match = localList.find(r => r.trackingId === trackingId || 'local_' + r.trackingId === id);
       if (match) {
         match.service = service;
         match.budget = budget;
@@ -508,10 +578,13 @@ window.closeAdminDetailModal = function() {
 // Delete Request Record
 window.deleteRequestRecord = async function(id) {
   if (!confirm("Are you sure you want to permanently delete this project request?")) return;
+  const reqObj = allRequests.find(r => r.id === id || r.trackingId === id);
+  const targetKey = (reqObj && reqObj.trackingId) ? reqObj.trackingId : id;
+
   try {
-    // 1. Delete from Server Database
+    // 1. Delete from Server Database (using trackingId)
     try {
-      await fetch(`/api/db/requests/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      await fetch(`/api/db/requests/${encodeURIComponent(targetKey)}`, { method: 'DELETE' });
     } catch (apiErr) {
       console.debug("Server DB delete request error:", apiErr);
     }
@@ -528,14 +601,14 @@ window.deleteRequestRecord = async function(id) {
     // 3. Clear local storage cache
     try {
       const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
-      const filteredLocal = localList.filter(r => r.trackingId !== id && 'local_' + r.trackingId !== id && r.id !== id);
+      const filteredLocal = localList.filter(r => r.trackingId !== targetKey && 'local_' + r.trackingId !== id && r.id !== id);
       localStorage.setItem('mayankzen_local_requests', JSON.stringify(filteredLocal));
     } catch (le) {}
 
     showToast("Request record deleted.", "info");
-    allRequests = allRequests.filter(r => r.id !== id && r.trackingId !== id);
+    allRequests = allRequests.filter(r => r.id !== id && r.trackingId !== targetKey);
     renderMetricsAndCharts();
-    renderTable(allRequests);
+    filterTable();
   } catch (err) {
     console.error("Delete error:", err);
     showToast("Delete failed: " + err.message, "error");
@@ -567,15 +640,17 @@ window.switchUserSubTab = function(subTab) {
 };
 
 // Load and Manage Users from Server Database & Cloud
-window.loadUsers = async function() {
+window.loadUsers = async function(silent = false) {
   const adminTableBody = document.getElementById("adminUsersTable");
   const clientTableBody = document.getElementById("clientUsersTable");
 
-  if (adminTableBody) {
-    adminTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem;"><span class="loading"></span> Loading administrator accounts...</td></tr>';
-  }
-  if (clientTableBody) {
-    clientTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem;"><span class="loading"></span> Loading client accounts...</td></tr>';
+  if (!silent) {
+    if (adminTableBody) {
+      adminTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem;"><span class="loading"></span> Loading administrator accounts...</td></tr>';
+    }
+    if (clientTableBody) {
+      clientTableBody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:1.5rem;"><span class="loading"></span> Loading client accounts...</td></tr>';
+    }
   }
 
   let usersMap = new Map();

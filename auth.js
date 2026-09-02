@@ -199,14 +199,7 @@ if (registerBtn) {
         console.warn("Email verification could not be sent:", e);
       }
 
-      await setDoc(doc(db, "users", user.uid), {
-        name: name,
-        email: email,
-        role: isAdminAccount ? "admin" : "user",
-        createdAt: new Date()
-      });
-
-      // Synchronize client account to persistent server DB
+      // 1. Immediately persist client user to Server Database (primary source of truth)
       try {
         await fetch('/api/db/users', {
           method: 'POST',
@@ -221,6 +214,18 @@ if (registerBtn) {
         });
       } catch (srvErr) {
         console.debug("Server DB registration sync notice:", srvErr);
+      }
+
+      // 2. Safely attempt Firestore user record write
+      try {
+        await setDoc(doc(db, "users", user.uid), {
+          name: name,
+          email: email,
+          role: isAdminAccount ? "admin" : "user",
+          createdAt: new Date()
+        });
+      } catch (fsErr) {
+        console.debug("Firestore registration profile notice (using server DB):", fsErr?.message || fsErr);
       }
 
       showToast("Account created successfully! Redirecting to login...", "success");
@@ -283,12 +288,29 @@ if (loginBtn) {
 
       const user = userCredential.user;
       const isAdmin = isStudioAdminEmail(user.email);
+      const uName = isAdmin ? "MayankZen Admin" : (user.displayName || email.split('@')[0]);
 
-      // Auto save or update user doc
+      // 1. Immediately sync to persistent server database
+      try {
+        await fetch('/api/db/users', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: user.uid,
+            name: uName,
+            email: email,
+            role: isAdmin ? "admin" : "user",
+            createdAt: new Date().toISOString()
+          })
+        });
+      } catch (srvErr) {
+        console.debug("Server DB login sync note:", srvErr);
+      }
+
+      // 2. Safe Firestore user document update
       try {
         const userRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userRef);
-        const uName = isAdmin ? "MayankZen Admin" : (user.displayName || email.split('@')[0]);
         if (!userDoc.exists()) {
           await setDoc(userRef, {
             name: uName,
@@ -299,21 +321,8 @@ if (loginBtn) {
         } else if (isAdmin && userDoc.data().role !== 'admin') {
           await setDoc(userRef, { role: 'admin' }, { merge: true });
         }
-
-        // Also sync to persistent server database
-        fetch('/api/db/users', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: user.uid,
-            name: uName,
-            email: email,
-            role: isAdmin ? "admin" : "user",
-            createdAt: new Date().toISOString()
-          })
-        }).catch(err => console.debug("Server DB login sync:", err));
       } catch (e) {
-        console.debug("User doc setup notice:", e);
+        console.debug("User doc Firestore sync note:", e?.message || e);
       }
 
       // Track admin status in local cache
@@ -369,23 +378,11 @@ if (googleLoginBtn) {
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const isAdmin = isStudioAdminEmail(user.email);
+      const uName = user.displayName || user.email?.split('@')[0] || 'User';
 
-      // Save user to Firestore
+      // 1. Immediately sync to server DB
       try {
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
-        const uName = user.displayName || user.email?.split('@')[0] || 'User';
-        if (!userSnap.exists()) {
-          await setDoc(userRef, {
-            name: uName,
-            email: user.email,
-            role: isAdmin ? "admin" : "user",
-            createdAt: new Date()
-          });
-        }
-
-        // Sync to server DB
-        fetch('/api/db/users', {
+        await fetch('/api/db/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -395,9 +392,25 @@ if (googleLoginBtn) {
             role: isAdmin ? "admin" : "user",
             createdAt: new Date().toISOString()
           })
-        }).catch(err => console.debug("Server DB google sync:", err));
+        });
+      } catch (err) {
+        console.debug("Server DB google sync notice:", err);
+      }
+
+      // 2. Safe Firestore user profile save
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+          await setDoc(userRef, {
+            name: uName,
+            email: user.email,
+            role: isAdmin ? "admin" : "user",
+            createdAt: new Date()
+          });
+        }
       } catch (e) {
-        console.debug("Google user profile save notice:", e);
+        console.debug("Google user profile Firestore notice:", e?.message || e);
       }
 
       if (isAdmin) {

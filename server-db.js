@@ -138,6 +138,11 @@ export const ServerDB = {
     return list;
   },
 
+  getRequestsByEmail(email) {
+    if (!email) return [];
+    return this.getAllRequests({ email });
+  },
+
   getRequestById(trackingId) {
     if (!trackingId) return null;
     const reqs = readJSON(PATHS.requests, {});

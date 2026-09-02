@@ -363,6 +363,20 @@
     });
   }
 
+  // Pre-fill logged-in user info in request form
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      const emailField = document.getElementById('email');
+      const nameField = document.getElementById('name');
+      if (emailField && !emailField.value && user.email) {
+        emailField.value = user.email;
+      }
+      if (nameField && !nameField.value && user.displayName) {
+        nameField.value = user.displayName;
+      }
+    }
+  });
+
   if (activeReqId) {
     mountChat(activeReqId);
   }
@@ -392,13 +406,17 @@
         const fileId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         const uploadRes = await uploadAttachmentToServer(f, fileId);
 
-        // Attempt remote upload if Firebase storage available
+        // Attempt remote upload if Firebase storage available with timeout guard
         let remoteUrl = null;
         if (storage) {
           try {
-            const fRef = storageRef(storage, `requests/${trackingId}/${Date.now()}_${f.name}`);
-            await uploadBytes(fRef, f);
-            remoteUrl = await getDownloadURL(fRef);
+            const uploadPromise = (async () => {
+              const fRef = storageRef(storage, `requests/${trackingId}/${Date.now()}_${f.name}`);
+              await uploadBytes(fRef, f);
+              return await getDownloadURL(fRef);
+            })();
+            const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 3000));
+            remoteUrl = await Promise.race([uploadPromise, timeoutPromise]);
           } catch (stErr) {
             console.debug('Storage fallback for initial attachment:', stErr);
           }
@@ -423,7 +441,7 @@
           filename: f.name,
           fileType: f.type,
           fileSize: f.size,
-          uid: 'client_' + trackingId,
+          uid: auth.currentUser ? auth.currentUser.uid : ('client_' + trackingId),
           sender: 'client',
           timestamp: Date.now(),
           type: 'file'
@@ -458,13 +476,17 @@
         console.warn('Could not cache request locally:', e);
       }
 
-      // 2. Save directly to Persistent Server DB (ensuring data survives logout & across all sessions)
+      // 2. Save directly to Persistent Server DB (ensuring data survives across all devices and sessions)
       try {
-        await fetch('/api/db/requests', {
+        const srvRes = await fetch('/api/db/requests', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(requestPayload)
         });
+
+        if (!srvRes.ok) {
+          console.warn('Server requests API response non-ok:', srvRes.status);
+        }
 
         // Also ensure client user is registered in persistent database
         if (email) {
@@ -472,7 +494,7 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              id: 'client_' + email.replace(/[^a-zA-Z0-9]/g, '_'),
+              id: auth.currentUser ? auth.currentUser.uid : ('client_' + email.replace(/[^a-zA-Z0-9]/g, '_')),
               name: name || 'Client User',
               email: email,
               role: 'user',
@@ -480,6 +502,15 @@
               createdAt: new Date().toISOString()
             })
           });
+        }
+
+        // Sync initial file seed messages to server chat
+        for (const msg of chatSeedMessages) {
+          await fetch(`/api/db/messages/${encodeURIComponent(trackingId)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(msg)
+          }).catch(e => console.debug('Sync seed chat message note:', e));
         }
       } catch (srvErr) {
         console.debug('Server DB sync note:', srvErr);

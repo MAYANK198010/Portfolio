@@ -1,0 +1,36 @@
+{
+  "admin@mayankzen.in": {
+    "id": "admin_admin_mayankzen_in",
+    "email": "admin@mayankzen.in",
+    "name": "Studio Admin",
+    "role": "admin",
+    "isMaster": true,
+    "createdAt": "Primary System Account",
+    "lastActive": "2026-09-02T16:32:52.321Z"
+  },
+  "mayank198010@gmail.com": {
+    "id": "admin_mayank198010_gmail_com",
+    "email": "mayank198010@gmail.com",
+    "name": "Mayank (Founder)",
+    "role": "admin",
+    "isMaster": true,
+    "createdAt": "Primary System Account",
+    "lastActive": "2026-09-02T16:32:52.321Z"
+  },
+  "test@example.com": {
+    "id": "usr_1788366896875_w0305k",
+    "email": "test@example.com",
+    "name": "Test User",
+    "role": "user",
+    "createdAt": "2026-09-02T16:34:56.875Z",
+    "lastActive": "2026-09-02T16:34:56.875Z"
+  },
+  "client@example.com": {
+    "id": "usr_1788367657414_o9345v",
+    "email": "client@example.com",
+    "name": "Tablet Tester",
+    "role": "user",
+    "createdAt": "2026-09-02T16:47:37.413Z",
+    "lastActive": "2026-09-02T16:47:37.414Z"
+  }
+}

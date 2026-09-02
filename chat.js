@@ -299,7 +299,7 @@ export function initChat(requestId, userId) {
           }
         },
         (error) => {
-          console.debug('Realtime database sync note (using local & broadcast storage):', error?.message || error);
+          console.debug('Realtime database sync note (using local & server storage):', error?.message || error);
           syncFromLocalStorage();
         }
       );
@@ -307,6 +307,50 @@ export function initChat(requestId, userId) {
       console.debug('Realtime DB connection note:', err?.message || err);
     }
   }
+
+  // Poll server database for cross-device message synchronization
+  async function syncFromServerDatabase() {
+    try {
+      const res = await fetch(`/api/db/messages/${encodeURIComponent(requestId)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && Array.isArray(json.data)) {
+          const currentLocal = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          const msgMap = new Map();
+
+          // Merge local first
+          currentLocal.forEach(m => {
+            const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
+            msgMap.set(key, m);
+          });
+
+          // Merge server messages
+          json.data.forEach(m => {
+            const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
+            if (!msgMap.has(key)) {
+              msgMap.set(key, m);
+            } else {
+              msgMap.set(key, { ...msgMap.get(key), ...m });
+            }
+          });
+
+          const merged = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          if (merged.length !== currentLocal.length || JSON.stringify(merged) !== JSON.stringify(currentLocal)) {
+            localStorage.setItem(storageKey, JSON.stringify(merged));
+            renderMessages(merged);
+          }
+        }
+      }
+    } catch (e) {
+      console.debug('Server chat sync notice:', e);
+    }
+  }
+
+  syncFromServerDatabase();
+  const chatPollTimer = setInterval(syncFromServerDatabase, 2500);
+
+  // Clean timer on page unload or container destruction
+  window.addEventListener('beforeunload', () => clearInterval(chatPollTimer));
 
   // Dispatch and save a message
   async function dispatchMessage(newMsg, attachmentPayload = null) {
@@ -334,6 +378,13 @@ export function initChat(requestId, userId) {
           attachmentPayload
         });
       }
+
+      // 4. Send directly to Persistent Server Database (accessible across all devices & sessions)
+      fetch(`/api/db/messages/${encodeURIComponent(requestId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMsg)
+      }).catch(srvErr => console.debug('Server DB message sync error:', srvErr));
     } catch (e) {
       console.debug('Local storage save error:', e);
     }

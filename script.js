@@ -119,12 +119,16 @@ function init3DCity() {
   }
   animate();
 
-  window.addEventListener('resize', () => {
+  const handleResize = () => {
     if (camera && renderer) {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     }
+  };
+  window.addEventListener('resize', handleResize);
+  window.addEventListener('orientationchange', () => {
+    setTimeout(handleResize, 150);
   });
   } catch (err) {
     console.debug("3D Scene init note:", err?.message || err);
