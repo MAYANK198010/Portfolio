@@ -1,4 +1,4 @@
-import { auth, db } from "./firebase.js";
+import { auth, db, realtimeDb } from "./firebase.js";
 import { initChat } from "./chat.js";
 import { downloadAttachment, openAttachmentPreview, formatBytes, getFileIcon } from "./attachments.js";
 import { 
@@ -8,6 +8,9 @@ import {
 import { 
   doc, getDoc, getDocs, collection, updateDoc, setDoc, deleteDoc, addDoc, serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  ref as rtdbRef, get as rtdbGet, child as rtdbChild, update as rtdbUpdate, remove as rtdbRemove
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 // Toast Helper
 function showToast(msg, type = 'success') {
@@ -185,6 +188,31 @@ async function loadRequests(silent = false) {
   } catch (error) {
     console.debug("Firestore requests sync note:", error?.message || error);
   }
+
+  // 4. Merge with Firebase Realtime Database
+  try {
+    if (realtimeDb) {
+      const rtdbSnap = await rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
+      if (rtdbSnap.exists()) {
+        const val = rtdbSnap.val();
+        Object.keys(val).forEach(key => {
+          const item = val[key];
+          const tId = item.trackingId || key;
+          const existing = requestsMap.get(tId) || {};
+          requestsMap.set(tId, {
+            id: tId,
+            ...existing,
+            ...item
+          });
+        });
+      }
+    }
+  } catch (rtdbErr) {
+    console.debug("Realtime DB requests sync note:", rtdbErr?.message || rtdbErr);
+  }
+
+  // Run cloud database diagnostic check
+  checkDatabaseHealth();
 
   const previousCount = allRequests.length;
   allRequests = Array.from(requestsMap.values());
@@ -379,8 +407,20 @@ function renderTable(requests) {
             console.debug("Firestore status sync note:", fsErr?.message || fsErr);
           }
         }
+
+        // 3. Update Firebase Realtime Database
+        if (realtimeDb) {
+          try {
+            await rtdbUpdate(rtdbChild(rtdbRef(realtimeDb), `service_requests/${targetKey}`), {
+              status: newStatus,
+              updatedAt: Date.now()
+            });
+          } catch (rtdbErr) {
+            console.debug("Realtime DB status sync note:", rtdbErr?.message || rtdbErr);
+          }
+        }
         
-        // 3. Update local storage cache
+        // 4. Update local storage cache
         try {
           const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
           const match = localList.find(r => r.trackingId === targetKey || 'local_' + r.trackingId === id);
@@ -598,7 +638,16 @@ window.deleteRequestRecord = async function(id) {
       }
     }
 
-    // 3. Clear local storage cache
+    // 3. Delete from Firebase Realtime Database
+    if (realtimeDb) {
+      try {
+        await rtdbRemove(rtdbChild(rtdbRef(realtimeDb), `service_requests/${targetKey}`));
+      } catch (rtErr) {
+        console.debug("Realtime DB delete request error:", rtErr?.message || rtErr);
+      }
+    }
+
+    // 4. Clear local storage cache
     try {
       const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
       const filteredLocal = localList.filter(r => r.trackingId !== targetKey && 'local_' + r.trackingId !== id && r.id !== id);
@@ -1248,5 +1297,81 @@ window.exportRequestsCSV = function() {
 window.refreshData = function() {
   loadRequests();
   loadUsers();
+  checkDatabaseHealth();
   showToast("Data refreshed", "info");
 };
+
+// Database Health & Sync Diagnostic Functions
+async function checkDatabaseHealth() {
+  const fsBadge = document.getElementById('firestoreBadge');
+  const rtdbBadge = document.getElementById('rtdbBadge');
+  const guidePanel = document.getElementById('ruleGuidePanel');
+
+  let firestoreOk = false;
+  let rtdbOk = false;
+
+  // 1. Test Firestore
+  try {
+    await getDocs(collection(db, "service_requests"));
+    firestoreOk = true;
+    if (fsBadge) {
+      fsBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+      fsBadge.style.color = '#34d399';
+      fsBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      fsBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Firestore: Connected';
+    }
+  } catch (fsErr) {
+    if (fsBadge) {
+      fsBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+      fsBadge.style.color = '#fca5a5';
+      fsBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      fsBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Firestore: Permission Denied';
+    }
+  }
+
+  // 2. Test Realtime Database
+  try {
+    if (realtimeDb) {
+      await rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
+      rtdbOk = true;
+      if (rtdbBadge) {
+        rtdbBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+        rtdbBadge.style.color = '#34d399';
+        rtdbBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+        rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Realtime DB: Connected';
+      }
+    }
+  } catch (rtErr) {
+    if (rtdbBadge) {
+      rtdbBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+      rtdbBadge.style.color = '#fca5a5';
+      rtdbBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      rtdbBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Realtime DB: Permission Denied';
+    }
+  }
+
+  // If rules are blocked, show the guide panel automatically
+  if ((!firestoreOk || !rtdbOk) && guidePanel && guidePanel.style.display !== 'block') {
+    guidePanel.style.display = 'block';
+  }
+}
+
+window.toggleRuleGuide = function() {
+  const panel = document.getElementById('ruleGuidePanel');
+  if (panel) {
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  }
+};
+
+window.copyFirestoreRules = function() {
+  const rules = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+  navigator.clipboard.writeText(rules);
+  showToast('Firestore rules copied to clipboard!', 'success');
+};
+
+window.copyRtdbRules = function() {
+  const rules = `{\n  "rules": {\n    ".read": true,\n    ".write": true\n  }\n}`;
+  navigator.clipboard.writeText(rules);
+  showToast('Realtime DB rules copied to clipboard!', 'success');
+};
+

@@ -106,6 +106,72 @@
     </div>
   </div>
 
+  <!-- Cloud Database Health & Cross-Device Sync Monitor -->
+  <div id="dbHealthCard" style="background: rgba(15, 23, 42, 0.75); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 14px; padding: 1.25rem 1.5rem; margin-bottom: 2rem; backdrop-filter: blur(16px);">
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <i class="fa-solid fa-database" style="color: var(--accent-green); font-size: 1.25rem;"></i>
+        <div>
+          <h3 style="color: white; font-size: 1.05rem; margin: 0; font-weight: 600;">Cloud Database & Multi-Device Sync Health</h3>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin: 0.15rem 0 0 0;">Monitoring data persistence across client devices and Studio Operations.</p>
+        </div>
+      </div>
+      <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center;">
+        <span id="firestoreBadge" class="status" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); margin: 0; font-size: 0.78rem;">
+          <i class="fa-solid fa-spinner fa-spin"></i> Firestore: Checking...
+        </span>
+        <span id="rtdbBadge" class="status" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); margin: 0; font-size: 0.78rem;">
+          <i class="fa-solid fa-spinner fa-spin"></i> Realtime DB: Checking...
+        </span>
+        <button id="toggleRuleGuideBtn" class="btn secondary btn-sm" onclick="toggleRuleGuide()" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">
+          <i class="fa-solid fa-shield-halved"></i> Setup Guide
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible Security Rules Helper (Appears if permission denied) -->
+    <div id="ruleGuidePanel" style="display: none; margin-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.25rem;">
+      <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; color: #fbbf24; font-size: 0.88rem; line-height: 1.5;">
+        <i class="fa-solid fa-circle-exclamation"></i> <strong>Why new requests only appeared on the client's device:</strong><br>
+        When clients submit requests from other devices, their browser attempts to write to Firebase (project: <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fff;">matnix-studios</code>). If the Firebase Console has default locked rules, Google's servers reject the write with <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fca5a5;">403 PERMISSION_DENIED</code>, causing the request to fall back into that device's local browser cache.
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
+        <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(139,92,246,0.3); border-radius: 10px; padding: 1rem;">
+          <h4 style="color: var(--primary-purple); font-size: 0.95rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-fire"></i> 1. Publish Firestore Rules</h4>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Open Firebase Console and publish read/write rules:</p>
+          <pre style="background: rgba(15,23,42,0.9); padding: 0.75rem; border-radius: 6px; font-size: 0.78rem; color: #a78bfa; overflow-x: auto; margin-bottom: 0.75rem;">rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}</pre>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn secondary btn-sm" onclick="copyFirestoreRules()"><i class="fa-solid fa-copy"></i> Copy Rules</button>
+            <a href="https://console.firebase.google.com/project/matnix-studios/firestore/rules" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open Firebase Rules</a>
+          </div>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 1rem;">
+          <h4 style="color: var(--accent-green); font-size: 0.95rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-bolt"></i> 2. Publish Realtime DB Rules</h4>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Open Realtime Database and set read/write to true:</p>
+          <pre style="background: rgba(15,23,42,0.9); padding: 0.75rem; border-radius: 6px; font-size: 0.78rem; color: #34d399; overflow-x: auto; margin-bottom: 0.75rem;">{
+  "rules": {
+    ".read": true,
+    ".write": true
+  }
+}</pre>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn secondary btn-sm" onclick="copyRtdbRules()"><i class="fa-solid fa-copy"></i> Copy Rules</button>
+            <a href="https://console.firebase.google.com/project/matnix-studios/database/matnix-studios-default-rtdb/rules" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open RTDB Rules</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- KPI Metrics Grid -->
   <div class="stats-grid">
     <div class="stat-card">

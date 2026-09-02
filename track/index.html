@@ -162,10 +162,11 @@
 
 <script type="module" src="../script.js"></script>
 <script type="module">
-  import { db, auth } from '../firebase.js';
+  import { db, auth, realtimeDb } from '../firebase.js';
   import { initChat } from '../chat.js';
   import { downloadAttachment, openAttachmentPreview, formatBytes, getFileIcon } from '../attachments.js';
   import { collection, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { ref as rtdbRef, get as rtdbGet, child as rtdbChild } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
   import { onAuthStateChanged, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
   const form = document.getElementById('trackForm');
@@ -319,20 +320,37 @@
 
     let foundData = null;
 
-    // 1. Check Server Database for persistent records
+    // 1. Check Firebase Realtime Database (fast cloud lookups)
     try {
-      const srvRes = await fetch(`/api/db/requests/${encodeURIComponent(normalizedId)}`);
-      if (srvRes.ok) {
-        const srvJson = await srvRes.json();
-        if (srvJson.data) {
-          foundData = srvJson.data;
+      if (realtimeDb) {
+        const rtdbSnap = await rtdbGet(rtdbChild(rtdbRef(realtimeDb), `service_requests/${normalizedId}`));
+        if (rtdbSnap.exists()) {
+          const val = rtdbSnap.val();
+          if (!email || !email.trim() || (val.email && val.email.toLowerCase() === email.trim().toLowerCase())) {
+            foundData = val;
+          }
         }
       }
-    } catch (e) {
-      console.debug('Server DB lookup notice:', e);
+    } catch (rtdbErr) {
+      console.debug('Realtime DB lookup notice:', rtdbErr?.message || rtdbErr);
     }
 
-    // 2. Check Local Storage for immediate lookup
+    // 2. Check Server Database for persistent records
+    if (!foundData) {
+      try {
+        const srvRes = await fetch(`/api/db/requests/${encodeURIComponent(normalizedId)}`);
+        if (srvRes.ok) {
+          const srvJson = await srvRes.json();
+          if (srvJson.data) {
+            foundData = srvJson.data;
+          }
+        }
+      } catch (e) {
+        console.debug('Server DB lookup notice:', e);
+      }
+    }
+
+    // 3. Check Local Storage for immediate lookup
     if (!foundData) {
       try {
         const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
@@ -354,7 +372,7 @@
       }
     }
 
-    // 3. Query Firestore database
+    // 4. Query Firestore database
     try {
       if (!auth.currentUser) {
         try {
@@ -396,6 +414,16 @@
     }
 
     if (foundData) {
+      // Cache locally for offline availability
+      try {
+        const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
+        const exists = localList.some(r => (r.trackingId || '').toUpperCase() === (foundData.trackingId || '').toUpperCase());
+        if (!exists) {
+          localList.unshift(foundData);
+          localStorage.setItem('mayankzen_local_requests', JSON.stringify(localList));
+        }
+      } catch (e) {}
+
       renderTrackingCard(foundData);
     } else {
       resultDiv.innerHTML = `

@@ -122,8 +122,12 @@
       <button id="copyCodeBtn" class="btn secondary btn-sm" onclick="copyTrackingCode()"><i class="fa-solid fa-copy"></i> Copy</button>
     </div>
 
+    <!-- Live Cloud Database Sync Status Indicator -->
+    <div id="cloudSyncStatus" style="max-width: 580px; margin: 0 auto 1.5rem; padding: 0.75rem 1rem; border-radius: 10px; font-size: 0.88rem; line-height: 1.5; text-align: center;"></div>
+
     <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
       <a id="trackNowBtn" href="/track/" class="btn primary"><i class="fa-solid fa-location-crosshairs"></i> Track Status Now</a>
+      <a id="whatsappSyncBtn" href="#" target="_blank" rel="noopener noreferrer" class="btn secondary" style="border-color: #25d366; color: #25d366;"><i class="fa-brands fa-whatsapp"></i> Notify Mayank on WhatsApp</a>
       <button class="btn secondary" onclick="document.getElementById('chatSection').scrollIntoView({behavior:'smooth'})"><i class="fa-solid fa-comments"></i> Open Live Chat</button>
     </div>
   </div>
@@ -231,10 +235,11 @@
 <script type="module" src="../script.js"></script>
 <script type="module">
   import { initChat } from '../chat.js';
-  import { auth, db, storage } from '../firebase.js';
+  import { auth, db, storage, realtimeDb } from '../firebase.js';
   import { storeAttachment, fileToDataUrl, formatBytes, getFileIcon, uploadAttachmentToServer } from '../attachments.js';
   import { onAuthStateChanged, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
   import { collection, addDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { ref as rtdbRef, set as rtdbSet } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
   import { ref as storageRef, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
   // Toast Notification Helper
@@ -461,7 +466,7 @@
         createdAt: new Date().toISOString()
       };
 
-      // 1. Save to local storage for immediate persistence
+      // 1. Save to local storage for immediate device persistence
       try {
         const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
         localList.unshift(requestPayload);
@@ -476,7 +481,46 @@
         console.warn('Could not cache request locally:', e);
       }
 
-      // 2. Save directly to Persistent Server DB (ensuring data survives across all devices and sessions)
+      let syncSuccess = false;
+      let syncChannel = '';
+
+      // 2. Try Firebase Realtime Database
+      try {
+        if (realtimeDb) {
+          await rtdbSet(rtdbRef(realtimeDb, `service_requests/${trackingId}`), {
+            ...requestPayload,
+            timestamp: Date.now()
+          });
+          syncSuccess = true;
+          syncChannel = 'Firebase Realtime DB';
+          console.log('Successfully written to Firebase Realtime DB');
+        }
+      } catch (rtdbErr) {
+        console.debug('Realtime DB write note:', rtdbErr?.message || rtdbErr);
+      }
+
+      // 3. Try Firestore write with auto guest authentication
+      try {
+        if (!auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (authErr) {
+            console.debug('Anonymous sign-in skipped:', authErr);
+          }
+        }
+
+        await addDoc(collection(db, 'service_requests'), {
+          ...requestPayload,
+          timestamp: serverTimestamp()
+        });
+        syncSuccess = true;
+        syncChannel = syncChannel ? (syncChannel + ' & Firestore') : 'Firestore';
+        console.log('Successfully written to Firestore');
+      } catch (err) {
+        console.debug('Firestore write note:', err?.message || err);
+      }
+
+      // 4. Try Persistent Server DB (Node.js backend if reachable)
       try {
         const srvRes = await fetch('/api/db/requests', {
           method: 'POST',
@@ -484,8 +528,9 @@
           body: JSON.stringify(requestPayload)
         });
 
-        if (!srvRes.ok) {
-          console.warn('Server requests API response non-ok:', srvRes.status);
+        if (srvRes.ok) {
+          syncSuccess = true;
+          syncChannel = syncChannel ? (syncChannel + ' & Server DB') : 'Server DB';
         }
 
         // Also ensure client user is registered in persistent database
@@ -501,7 +546,7 @@
               mobile: mobile || '',
               createdAt: new Date().toISOString()
             })
-          });
+          }).catch(e => console.debug('Sync user note:', e));
         }
 
         // Sync initial file seed messages to server chat
@@ -513,33 +558,40 @@
           }).catch(e => console.debug('Sync seed chat message note:', e));
         }
       } catch (srvErr) {
-        console.debug('Server DB sync note:', srvErr);
+        console.debug('Server DB sync note (expected on static hosting):', srvErr);
       }
 
-      // 3. Try Firestore write with auto guest authentication
-      try {
-        if (!auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (authErr) {
-            console.warn('Anonymous sign-in skipped:', authErr);
-          }
-        }
-
-        await addDoc(collection(db, 'service_requests'), {
-          ...requestPayload,
-          timestamp: serverTimestamp()
-        });
-      } catch (err) {
-        console.warn('Cloud write fallback activated:', err.message);
-      }
-
-      // 3. Update UI to success state
+      // 5. Update UI to success state with transparent sync details
       activeReqId = trackingId;
       document.getElementById('createdTrackingId').textContent = trackingId;
       document.getElementById('trackNowBtn').href = `/track/?id=${trackingId}`;
+
+      const waMsg = `Hi Mayank, I submitted a project request on MayankZen Studios.%0A%0A*Tracking ID:* ${trackingId}%0A*Name:* ${encodeURIComponent(name)}%0A*Service:* ${encodeURIComponent(service)}%0A*Budget:* ₹${budget}%0A*Email:* ${encodeURIComponent(email)}`;
+      const waBtn = document.getElementById('whatsappSyncBtn');
+      if (waBtn) {
+        waBtn.href = `https://wa.me/919968198010?text=${waMsg}`;
+      }
+
+      const syncStatusEl = document.getElementById('cloudSyncStatus');
+      if (syncStatusEl) {
+        if (syncSuccess) {
+          syncStatusEl.style.background = 'rgba(16, 185, 129, 0.15)';
+          syncStatusEl.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+          syncStatusEl.style.color = '#34d399';
+          syncStatusEl.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <strong>Synced to Cloud Database (${syncChannel})</strong>: Visible across all devices and Studio Operations.`;
+          showToast(`Request submitted & synced to Cloud DB! Tracking ID: ${trackingId}`, 'success');
+        } else {
+          syncStatusEl.style.background = 'rgba(245, 158, 11, 0.15)';
+          syncStatusEl.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+          syncStatusEl.style.color = '#fbbf24';
+          syncStatusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Saved locally on this device.</strong> Cloud DB write was blocked by Firebase security rules. Please tap <strong>Notify Mayank on WhatsApp</strong> below so your project begins without delay.`;
+          showToast(`Request saved locally (offline mode). Please share on WhatsApp!`, 'info');
+        }
+      } else {
+        showToast(`Request submitted! Tracking ID: ${trackingId}`, 'success');
+      }
+
       document.getElementById('successNotice').style.display = 'block';
-      showToast(`Request submitted! Tracking ID: ${trackingId}`, 'success');
 
       attachedFiles = [];
       renderAttachedFiles();

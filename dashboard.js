@@ -1,6 +1,7 @@
-import { auth, db } from "./firebase.js";
+import { auth, db, realtimeDb } from "./firebase.js";
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { doc, getDoc, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { ref as rtdbRef, get as rtdbGet, child as rtdbChild } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 let currentUser = null;
 
@@ -115,7 +116,27 @@ window.loadUserRequests = async function() {
     console.warn("Local storage check error:", e);
   }
 
-  // 3. Load from Firestore
+  // 3. Load from Firebase Realtime Database
+  try {
+    if (realtimeDb) {
+      const rtdbSnap = await rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
+      if (rtdbSnap.exists()) {
+        const val = rtdbSnap.val();
+        Object.keys(val).forEach(key => {
+          const item = val[key];
+          if (item.email && currentUser.email && item.email.toLowerCase() === currentUser.email.toLowerCase()) {
+            const tId = item.trackingId || key;
+            const existing = requestsMap.get(tId) || {};
+            requestsMap.set(tId, { id: tId, ...existing, ...item });
+          }
+        });
+      }
+    }
+  } catch (rtdbErr) {
+    console.debug("Realtime DB query note in dashboard:", rtdbErr?.message || rtdbErr);
+  }
+
+  // 4. Load from Firestore
   try {
     const q = query(
       collection(db, "service_requests"),
