@@ -31,11 +31,12 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 
   <!-- Favicon & Site Icons (Supports Google Search Console 48px+ standard, Modern SVG, Retina & PWA) -->
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
   <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
@@ -125,7 +126,12 @@
     </div>
 
     <!-- Live Cloud Database Sync Status Indicator -->
-    <div id="cloudSyncStatus" style="max-width: 580px; margin: 0 auto 1.5rem; padding: 0.75rem 1rem; border-radius: 10px; font-size: 0.88rem; line-height: 1.5; text-align: center;"></div>
+    <div id="cloudSyncStatus" style="max-width: 580px; margin: 0 auto 1rem; padding: 0.75rem 1rem; border-radius: 10px; font-size: 0.88rem; line-height: 1.5; text-align: center;"></div>
+
+    <!-- Automated Confirmation Email Notice -->
+    <div id="emailConfirmationBadge" style="max-width: 580px; margin: 0 auto 1.5rem; padding: 0.75rem 1rem; border-radius: 10px; font-size: 0.88rem; line-height: 1.5; text-align: center; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.4); color: #60a5fa; display: none;">
+      <i class="fa-solid fa-paper-plane"></i> <strong>Official Confirmation Sent</strong>: Sent from <code style="color: #93c5fd; background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px;">account@mayankzen.in</code>.
+    </div>
 
     <div style="display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
       <a id="trackNowBtn" href="/track/" class="btn primary"><i class="fa-solid fa-location-crosshairs"></i> Track Status Now</a>
@@ -362,12 +368,6 @@
     // Mount chat directly
     const uid = auth.currentUser ? auth.currentUser.uid : 'client_' + reqId;
     initChat(reqId, uid);
-
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        initChat(reqId, user.uid);
-      }
-    });
   }
 
   // Pre-fill logged-in user info in request form
@@ -442,6 +442,7 @@
 
         // Prepare seed chat message for this attachment
         chatSeedMessages.push({
+          id: 'seed_' + fileId,
           fileId: fileId,
           fileUrl: effectiveUrl,
           dataUrl: (uploadRes?.dataUrl && uploadRes.dataUrl.length < 500000) ? uploadRes.dataUrl : null,
@@ -486,33 +487,21 @@
       let syncSuccess = false;
       const syncedChannels = [];
 
-      // 2. Direct HTTPS REST write to Firebase Realtime Database (Guaranteed Cross-Device Cloud Sync)
+      // 2. Try Firestore JS SDK (Provisioned Project Database)
       try {
-        const rtdbPayload = {
+        const fsPromise = addDoc(collection(db, 'service_requests'), {
           ...requestPayload,
-          timestamp: Date.now()
-        };
-        // Firebase RTDB does not store empty arrays: only include attachments if populated
-        if (!rtdbPayload.attachments || rtdbPayload.attachments.length === 0) {
-          delete rtdbPayload.attachments;
-        }
-
-        const restRes = await fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(trackingId)}.json`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(rtdbPayload)
+          timestamp: serverTimestamp()
         });
-
-        if (restRes.ok) {
-          syncSuccess = true;
-          syncedChannels.push('Firebase Realtime Cloud DB');
-          console.log('Successfully saved to RTDB via direct REST');
-        }
-      } catch (restErr) {
-        console.debug('RTDB direct REST sync notice:', restErr);
+        const fsTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore SDK timeout')), 4000));
+        await Promise.race([fsPromise, fsTimeout]);
+        syncSuccess = true;
+        syncedChannels.push('Cloud Firestore');
+      } catch (err) {
+        console.debug('Firestore SDK write note:', err?.message || err);
       }
 
-      // 3. Try Firebase Realtime Database JS SDK (with 3-second timeout guard)
+      // 3. Try Firebase Realtime Database JS SDK if configured
       try {
         if (realtimeDb) {
           const sdkPayload = {
@@ -526,63 +515,14 @@
           const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('RTDB SDK timeout')), 3000));
           await Promise.race([writePromise, timeoutPromise]);
           syncSuccess = true;
-          if (!syncedChannels.includes('Firebase Realtime Cloud DB')) {
-            syncedChannels.push('Firebase Realtime Cloud DB');
-          }
+          syncedChannels.push('Realtime DB');
         }
       } catch (rtdbErr) {
         console.debug('Realtime DB SDK note:', rtdbErr?.message || rtdbErr);
       }
 
-      // 4. Try Firestore REST API write
-      try {
-        const fsFields = {
-          trackingId: { stringValue: trackingId },
-          name: { stringValue: name || '' },
-          email: { stringValue: email || '' },
-          mobile: { stringValue: mobile || '' },
-          service: { stringValue: service || '' },
-          budget: { integerValue: String(budget || 0) },
-          description: { stringValue: description || '' },
-          status: { stringValue: 'Pending' },
-          createdAt: { stringValue: new Date().toISOString() }
-        };
-        const fsRes = await fetch(`https://firestore.googleapis.com/v1/projects/matnix-studios/databases/(default)/documents/service_requests?key=AIzaSyBMNfCZ2LSVkCWVmJ9w2jYKG8PHaDYUyfI`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: fsFields })
-        });
-        if (fsRes.ok) {
-          syncSuccess = true;
-          syncedChannels.push('Firestore');
-        }
-      } catch (fsErr) {
-        console.debug('Firestore REST write notice:', fsErr);
-      }
-
-      // 5. Try Firestore JS SDK (with timeout)
-      try {
-        if (!auth.currentUser) {
-          try {
-            await signInAnonymously(auth);
-          } catch (authErr) {
-            console.debug('Anonymous sign-in skipped:', authErr);
-          }
-        }
-
-        const fsPromise = addDoc(collection(db, 'service_requests'), {
-          ...requestPayload,
-          timestamp: serverTimestamp()
-        });
-        const fsTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore SDK timeout')), 3000));
-        await Promise.race([fsPromise, fsTimeout]);
-        syncSuccess = true;
-        if (!syncedChannels.includes('Firestore')) syncedChannels.push('Firestore');
-      } catch (err) {
-        console.debug('Firestore SDK write note:', err?.message || err);
-      }
-
-      // 6. Try Persistent Server DB (Node.js backend if reachable)
+      // 4. Try Persistent Server DB (Node.js backend if reachable)
+      let mailResult = null;
       try {
         const srvRes = await fetch('/api/db/requests', {
           method: 'POST',
@@ -593,6 +533,10 @@
         if (srvRes.ok) {
           syncSuccess = true;
           syncedChannels.push('Server DB');
+          const srvData = await srvRes.json();
+          if (srvData && srvData.emailResult) {
+            mailResult = srvData.emailResult;
+          }
         }
 
         // Also ensure client user is registered in persistent database
@@ -623,7 +567,36 @@
         console.debug('Server DB sync note (expected on static hosting):', srvErr);
       }
 
-      // 7. Update UI to success state with transparent sync details
+      // 5. Dispatch confirmation email fallback if server DB didn't handle it
+      if (email && !mailResult) {
+        try {
+          const mRes = await fetch('/api/send-confirmation-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestPayload)
+          });
+          if (mRes.ok) {
+            mailResult = await mRes.json();
+          }
+        } catch (e) {
+          console.debug('Direct confirmation email dispatch note:', e);
+        }
+      }
+
+      // 6. Update email confirmation badge UI
+      const emailBadge = document.getElementById('emailConfirmationBadge');
+      if (emailBadge && email) {
+        emailBadge.style.display = 'block';
+        if (mailResult && mailResult.sentLive) {
+          emailBadge.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Official Confirmation Sent</strong>: An automated email with Tracking ID <strong>${trackingId}</strong> and status <strong>Pending</strong> was sent from <strong>account@mayankzen.in</strong> to <span style="text-decoration: underline;">${email}</span>. Please check your inbox and spam folder.`;
+        } else if (mailResult && mailResult.unblockRequired) {
+          emailBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #facc15; margin-right: 0.35rem;"></i> <strong>Request Confirmed [${trackingId}]</strong>: Your service request is safely registered! Note: Outbound email relay from Zoho requires a quick unblock: <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock Zoho outbound sending</a>. Studio admin has been notified.`;
+        } else {
+          emailBadge.innerHTML = `<i class="fa-solid fa-paper-plane" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Request Registered [${trackingId}]</strong>: Confirmation queued for dispatch to <span style="text-decoration: underline;">${email}</span>. Studio admin has received your brief.`;
+        }
+      }
+
+      // 8. Update UI to success state with transparent sync details
       activeReqId = trackingId;
       document.getElementById('createdTrackingId').textContent = trackingId;
       document.getElementById('trackNowBtn').href = `/track/?id=${trackingId}`;

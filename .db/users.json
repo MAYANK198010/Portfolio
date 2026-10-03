@@ -9,13 +9,14 @@
     "lastActive": "2026-09-02T16:32:52.321Z"
   },
   "mayank198010@gmail.com": {
-    "id": "admin_mayank198010_gmail_com",
+    "id": "client_mayank198010_gmail_com",
     "email": "mayank198010@gmail.com",
-    "name": "Mayank (Founder)",
+    "name": "Mayank",
     "role": "admin",
     "isMaster": true,
     "createdAt": "Primary System Account",
-    "lastActive": "2026-09-02T16:32:52.321Z"
+    "lastActive": "2026-10-03T17:22:05.867Z",
+    "mobile": "+919968198010"
   },
   "test@example.com": {
     "id": "usr_1788366896875_w0305k",
@@ -32,5 +33,13 @@
     "role": "user",
     "createdAt": "2026-09-02T16:47:37.413Z",
     "lastActive": "2026-09-02T16:47:37.414Z"
+  },
+  "accounts@mayankzen.in": {
+    "id": "usr_1791048886862_lqoc7i",
+    "email": "accounts@mayankzen.in",
+    "name": "Mayank Studio Client",
+    "role": "user",
+    "createdAt": "2026-10-03T17:34:46.862Z",
+    "lastActive": "2026-10-03T17:34:46.862Z"
   }
 }

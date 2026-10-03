@@ -1,6 +1,6 @@
 import { auth, storage, realtimeDb } from './firebase.js';
 import { ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js";
-import { ref as dbRef, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { ref as dbRef, push, onValue, off } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { 
   storeAttachment, 
   getAttachment, 
@@ -12,6 +12,70 @@ import {
   uploadAttachmentToServer
 } from './attachments.js';
 
+// Module-level singleton to track and cleanly teardown active chat sessions
+let activeChatSession = null;
+
+/**
+ * Robust message deduplicator. Merges two lists of messages without duplicates,
+ * matching by unique ID or by sender + content + timestamp proximity (within 3.5s).
+ */
+export function mergeAndDeduplicate(existingList = [], incomingList = []) {
+  const mergedMap = new Map();
+  const combined = [...existingList, ...incomingList];
+
+  for (const msg of combined) {
+    if (!msg) continue;
+
+    const content = (msg.text || msg.fileId || msg.filename || '').trim();
+    const sender = msg.sender || 'client';
+    const timestamp = Number(msg.timestamp) || Date.now();
+
+    // Check if an existing message matches by ID or by fingerprint
+    let matchedKey = null;
+
+    if (msg.id && mergedMap.has(msg.id)) {
+      matchedKey = msg.id;
+    } else {
+      for (const [key, existing] of mergedMap.entries()) {
+        if (msg.id && existing.id && existing.id === msg.id) {
+          matchedKey = key;
+          break;
+        }
+
+        const existingContent = (existing.text || existing.fileId || existing.filename || '').trim();
+        const existingSender = existing.sender || 'client';
+        const existingTime = Number(existing.timestamp) || 0;
+        const timeDiff = Math.abs(timestamp - existingTime);
+
+        if (existingSender === sender && existingContent === content && timeDiff < 3500) {
+          matchedKey = key;
+          break;
+        }
+      }
+    }
+
+    if (matchedKey) {
+      const prev = mergedMap.get(matchedKey);
+      mergedMap.set(matchedKey, {
+        ...prev,
+        ...msg,
+        id: prev.id || msg.id,
+        fileUrl: prev.fileUrl || msg.fileUrl,
+        dataUrl: prev.dataUrl || msg.dataUrl,
+        timestamp: Math.min(prev.timestamp || timestamp, timestamp)
+      });
+    } else {
+      const newKey = msg.id || `msg_${timestamp}_${Math.random().toString(36).substr(2, 6)}`;
+      mergedMap.set(newKey, {
+        ...msg,
+        id: msg.id || newKey
+      });
+    }
+  }
+
+  return Array.from(mergedMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+}
+
 // Advanced real-time project chat manager with multi-tab broadcast, server sync, IndexedDB caching & attachments
 export function initChat(requestId, userId) {
   const chatContainer = document.getElementById('chatMessages');
@@ -19,10 +83,29 @@ export function initChat(requestId, userId) {
   const sendBtn = document.getElementById('sendBtn');
   const fileInput = document.getElementById('fileInput');
 
-  if (!chatContainer || !messageInput || !sendBtn) return;
+  if (!chatContainer || !messageInput || !sendBtn || !requestId) return;
+
+  // If a session is already active for this exact requestId, just update userId and re-render
+  if (activeChatSession && activeChatSession.requestId === requestId) {
+    activeChatSession.userId = userId;
+    activeChatSession.isAdmin = (typeof userId === 'string' && (userId.includes('admin') || userId.includes('mayank198010')));
+    activeChatSession.render();
+    return;
+  }
+
+  // Teardown previous chat session if switching requests
+  if (activeChatSession) {
+    try {
+      activeChatSession.destroy();
+    } catch (e) {
+      console.debug('Error destroying previous chat session:', e);
+    }
+    activeChatSession = null;
+  }
 
   const storageKey = `mayankzen_chat_${requestId}`;
-  const isAdmin = (typeof userId === 'string' && (userId.includes('admin') || userId.includes('mayank198010')));
+  let isAdmin = (typeof userId === 'string' && (userId.includes('admin') || userId.includes('mayank198010')));
+  let isSending = false;
 
   // Setup BroadcastChannel for instantaneous cross-tab live synchronization
   let broadcastChannel = null;
@@ -34,7 +117,12 @@ export function initChat(requestId, userId) {
           if (event.data.attachmentPayload && event.data.msg && event.data.msg.fileId) {
             await storeAttachment(event.data.msg.fileId, event.data.attachmentPayload);
           }
-          syncFromLocalStorage();
+          if (event.data.msg) {
+            const current = getLocalMessages();
+            const deduplicated = mergeAndDeduplicate(current, [event.data.msg]);
+            saveLocalMessages(deduplicated);
+            renderMessages(deduplicated);
+          }
         }
       };
     }
@@ -43,11 +131,12 @@ export function initChat(requestId, userId) {
   }
 
   // Cross-tab fallback listener using storage event
-  window.addEventListener('storage', (e) => {
+  const storageHandler = (e) => {
     if (e.key === storageKey) {
       syncFromLocalStorage();
     }
-  });
+  };
+  window.addEventListener('storage', storageHandler);
 
   // Render quick prompts above input if not already present
   let promptsBar = document.getElementById('chatQuickPrompts');
@@ -98,7 +187,7 @@ export function initChat(requestId, userId) {
   }
 
   // Delegated event listener for chat actions (previews & downloads)
-  chatContainer.onclick = async (e) => {
+  const chatClickHandler = async (e) => {
     const downloadBtn = e.target.closest('[data-action="download"]');
     if (downloadBtn) {
       e.preventDefault();
@@ -119,10 +208,31 @@ export function initChat(requestId, userId) {
       return;
     }
   };
+  chatContainer.onclick = chatClickHandler;
+
+  function getLocalMessages() {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveLocalMessages(msgs) {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(msgs));
+    } catch (e) {
+      console.debug('Failed to write to local storage:', e);
+    }
+  }
 
   // Helper to render messages with modern bubble UI
   function renderMessages(messages) {
-    if (!messages || messages.length === 0) {
+    // Always deduplicate before drawing
+    const cleanList = mergeAndDeduplicate(messages, []);
+
+    if (!cleanList || cleanList.length === 0) {
       chatContainer.innerHTML = `
         <div style="text-align: center; color: var(--text-secondary); padding: 2rem 1rem; margin: auto;">
           <div style="width: 50px; height: 50px; border-radius: 14px; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.35); display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; color: var(--accent-green); font-size: 1.5rem;">
@@ -151,13 +261,14 @@ export function initChat(requestId, userId) {
     dateDiv.innerHTML = `<span><i class="fa-solid fa-lock" style="font-size: 0.65rem;"></i> Active Studio Session</span>`;
     chatContainer.appendChild(dateDiv);
 
-    messages.forEach((msg, idx) => {
+    cleanList.forEach((msg, idx) => {
       const isSent = msg.uid === userId || (isAdmin && msg.sender === 'admin') || (!isAdmin && msg.sender === 'client' && (!msg.uid || msg.uid === userId || String(msg.uid).startsWith('client_')));
       const senderLabel = isSent ? 'You' : (msg.sender === 'admin' ? 'MayankZen Studio' : 'Client');
       const avatarIcon = isSent ? '<i class="fa-solid fa-user"></i>' : (msg.sender === 'admin' ? '<i class="fa-solid fa-crown"></i>' : '<i class="fa-solid fa-user-tie"></i>');
 
       const row = document.createElement('div');
       row.className = `message-row ${isSent ? 'sent' : 'received'}`;
+      if (msg.id) row.setAttribute('data-msg-id', msg.id);
 
       const avatar = document.createElement('div');
       avatar.className = 'message-avatar';
@@ -259,47 +370,43 @@ export function initChat(requestId, userId) {
   }
 
   function syncFromLocalStorage() {
-    try {
-      const msgs = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      renderMessages(msgs);
-    } catch (e) {
-      console.debug('Local storage sync error:', e);
-    }
+    const msgs = getLocalMessages();
+    renderMessages(msgs);
   }
 
-  // Load from local storage first for instant rendering
-  let localMessages = [];
-  try {
-    localMessages = JSON.parse(localStorage.getItem(storageKey) || '[]');
-  } catch (e) {
-    localMessages = [];
-  }
-  renderMessages(localMessages);
+  // Initial load
+  const initialMessages = getLocalMessages();
+  renderMessages(initialMessages);
 
-  // Connect to Firebase Realtime Database with graceful error handling
+  // Connect to Firebase Realtime Database with deduplication
+  let rtdbListener = null;
+  let chatRef = null;
   if (realtimeDb) {
     try {
-      const chatRef = dbRef(realtimeDb, `chats/${requestId}`);
-      onValue(
+      chatRef = dbRef(realtimeDb, `chats/${requestId}`);
+      rtdbListener = onValue(
         chatRef,
         (snapshot) => {
           try {
             const serverMessages = [];
             snapshot.forEach((child) => {
-              serverMessages.push(child.val());
+              const val = child.val();
+              if (val) {
+                serverMessages.push({ ...val, id: val.id || child.key });
+              }
             });
             if (serverMessages.length > 0) {
-              localStorage.setItem(storageKey, JSON.stringify(serverMessages));
-              renderMessages(serverMessages);
-            } else if (localMessages.length > 0) {
-              renderMessages(localMessages);
+              const current = getLocalMessages();
+              const merged = mergeAndDeduplicate(current, serverMessages);
+              saveLocalMessages(merged);
+              renderMessages(merged);
             }
           } catch (snapErr) {
             console.debug('Snapshot processing note:', snapErr);
           }
         },
         (error) => {
-          console.debug('Realtime database sync note (using local & server storage):', error?.message || error);
+          console.debug('Realtime database sync note:', error?.message || error);
           syncFromLocalStorage();
         }
       );
@@ -308,74 +415,29 @@ export function initChat(requestId, userId) {
     }
   }
 
-  // Poll server database and RTDB REST for cross-device message synchronization
+  // Poll server database with deduplication for cross-device message synchronization
   async function syncFromServerDatabase() {
-    const currentLocal = JSON.parse(localStorage.getItem(storageKey) || '[]');
-    const msgMap = new Map();
-
-    // Load current local first
-    currentLocal.forEach(m => {
-      const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
-      msgMap.set(key, m);
-    });
-
-    let updated = false;
-
-    // 1. Try Firebase Realtime Database direct REST (guaranteed across all devices)
-    try {
-      const rtdbRes = await fetch(`https://matnix-studios-default-rtdb.firebaseio.com/chats/${encodeURIComponent(requestId)}.json`);
-      if (rtdbRes.ok) {
-        const val = await rtdbRes.json();
-        if (val && typeof val === 'object') {
-          Object.keys(val).forEach(k => {
-            const m = val[k];
-            if (m) {
-              const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
-              if (!msgMap.has(key)) {
-                msgMap.set(key, m);
-                updated = true;
-              }
-            }
-          });
-        }
-      }
-    } catch (e) {
-      console.debug('RTDB REST chat sync notice:', e);
-    }
-
-    // 2. Try Node.js server database if available
     try {
       const res = await fetch(`/api/db/messages/${encodeURIComponent(requestId)}`);
       if (res.ok) {
         const json = await res.json();
-        if (json.data && Array.isArray(json.data)) {
-          json.data.forEach(m => {
-            const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
-            if (!msgMap.has(key)) {
-              msgMap.set(key, m);
-              updated = true;
-            } else {
-              msgMap.set(key, { ...msgMap.get(key), ...m });
-            }
-          });
+        if (json.data && Array.isArray(json.data) && json.data.length > 0) {
+          const current = getLocalMessages();
+          const merged = mergeAndDeduplicate(current, json.data);
+          
+          if (merged.length !== current.length || JSON.stringify(merged) !== JSON.stringify(current)) {
+            saveLocalMessages(merged);
+            renderMessages(merged);
+          }
         }
       }
     } catch (e) {
       console.debug('Server chat sync notice:', e);
     }
-
-    if (updated || msgMap.size !== currentLocal.length) {
-      const merged = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      localStorage.setItem(storageKey, JSON.stringify(merged));
-      renderMessages(merged);
-    }
   }
 
   syncFromServerDatabase();
-  const chatPollTimer = setInterval(syncFromServerDatabase, 2500);
-
-  // Clean timer on page unload or container destruction
-  window.addEventListener('beforeunload', () => clearInterval(chatPollTimer));
+  const chatPollTimer = setInterval(syncFromServerDatabase, 3000);
 
   // Dispatch and save a message
   async function dispatchMessage(newMsg, attachmentPayload = null) {
@@ -385,17 +447,18 @@ export function initChat(requestId, userId) {
         await storeAttachment(newMsg.fileId, attachmentPayload);
       }
 
-      // 2. Optimistically update local messages in localStorage
-      const msgs = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      // 2. Optimistically update local messages in localStorage with deduplication
+      const msgs = getLocalMessages();
       const localMsgCopy = { ...newMsg };
       if (localMsgCopy.dataUrl && localMsgCopy.dataUrl.length > 500000) {
         delete localMsgCopy.dataUrl; // will resolve from server endpoint or IDB
       }
-      msgs.push(localMsgCopy);
-      localStorage.setItem(storageKey, JSON.stringify(msgs));
-      renderMessages(msgs);
+      
+      const updatedList = mergeAndDeduplicate(msgs, [localMsgCopy]);
+      saveLocalMessages(updatedList);
+      renderMessages(updatedList);
 
-      // 3. Notify other tabs immediately via broadcast channel with attachment data
+      // 3. Notify other tabs immediately via broadcast channel
       if (broadcastChannel) {
         broadcastChannel.postMessage({
           type: 'NEW_CHAT_MESSAGE',
@@ -404,18 +467,7 @@ export function initChat(requestId, userId) {
         });
       }
 
-      // 4. Push to Firebase Realtime Database via direct REST for cross-device delivery
-      try {
-        const restMsg = { ...newMsg };
-        if (restMsg.dataUrl && restMsg.dataUrl.length > 20000) delete restMsg.dataUrl;
-        fetch(`https://matnix-studios-default-rtdb.firebaseio.com/chats/${encodeURIComponent(requestId)}.json`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(restMsg)
-        }).catch(e => console.debug('RTDB REST chat push notice:', e));
-      } catch (e) {}
-
-      // 5. Send directly to Persistent Server Database (accessible across all devices & sessions)
+      // 4. Send directly to Persistent Server Database
       fetch(`/api/db/messages/${encodeURIComponent(requestId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -425,10 +477,9 @@ export function initChat(requestId, userId) {
       console.debug('Local storage save error:', e);
     }
 
-    // 6. Push to Firebase Realtime Database SDK if connected
-    if (realtimeDb) {
+    // 5. Push to Firebase Realtime Database SDK if connected
+    if (realtimeDb && chatRef) {
       try {
-        const chatRef = dbRef(realtimeDb, `chats/${requestId}`);
         const rtdbMsg = { ...newMsg };
         if (rtdbMsg.dataUrl && rtdbMsg.dataUrl.length > 20000) {
           delete rtdbMsg.dataUrl;
@@ -446,11 +497,17 @@ export function initChat(requestId, userId) {
   }
 
   // Send regular text message
-  function sendMessage() {
+  async function sendMessage() {
+    if (isSending) return;
     const text = messageInput.value.trim();
     if (!text) return;
 
+    isSending = true;
+
+    // Generate unique ID right at creation so client and server share the exact same ID
+    const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     const newMsg = {
+      id: msgId,
       text,
       uid: userId,
       sender: isAdmin ? 'admin' : 'client',
@@ -458,9 +515,16 @@ export function initChat(requestId, userId) {
       type: 'text'
     };
 
-    dispatchMessage(newMsg);
     messageInput.value = '';
     messageInput.focus();
+
+    try {
+      await dispatchMessage(newMsg);
+    } finally {
+      setTimeout(() => {
+        isSending = false;
+      }, 300);
+    }
   }
 
   // Process and upload attached file
@@ -468,6 +532,7 @@ export function initChat(requestId, userId) {
     if (!file) return;
 
     const fileId = 'att_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     setUploadStatus(`Uploading ${file.name} (${formatBytes(file.size)})...`);
 
     try {
@@ -497,6 +562,7 @@ export function initChat(requestId, userId) {
       };
 
       const newMsg = {
+        id: msgId,
         fileId: fileId,
         fileUrl: remoteStorageUrl || uploadRes?.fileUrl || `/api/attachments/${fileId}`,
         dataUrl: (uploadRes?.dataUrl && uploadRes.dataUrl.length < 500000) ? uploadRes.dataUrl : null,
@@ -517,14 +583,18 @@ export function initChat(requestId, userId) {
     }
   }
 
-  // Re-bind click event cleanly
+  // Re-bind send button cleanly
   const newSendBtn = sendBtn.cloneNode(true);
   sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
-  newSendBtn.addEventListener('click', sendMessage);
+  newSendBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    sendMessage();
+  });
 
-  // Allow Enter key to send
+  // Allow Enter key to send cleanly without double triggering
   messageInput.onkeydown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.isComposing) return;
       e.preventDefault();
       sendMessage();
     }
@@ -551,19 +621,17 @@ export function initChat(requestId, userId) {
   }
 
   // Support Drag and Drop onto Chat Container
-  chatContainer.addEventListener('dragover', (e) => {
+  const dragOverHandler = (e) => {
     e.preventDefault();
     chatContainer.style.background = 'rgba(16, 185, 129, 0.08)';
     chatContainer.style.borderColor = 'var(--accent-green)';
-  });
-
-  chatContainer.addEventListener('dragleave', (e) => {
+  };
+  const dragLeaveHandler = (e) => {
     e.preventDefault();
     chatContainer.style.background = '';
     chatContainer.style.borderColor = '';
-  });
-
-  chatContainer.addEventListener('drop', async (e) => {
+  };
+  const dropHandler = async (e) => {
     e.preventDefault();
     chatContainer.style.background = '';
     chatContainer.style.borderColor = '';
@@ -572,10 +640,14 @@ export function initChat(requestId, userId) {
         await processAndSendFile(file);
       }
     }
-  });
+  };
+
+  chatContainer.addEventListener('dragover', dragOverHandler);
+  chatContainer.addEventListener('dragleave', dragLeaveHandler);
+  chatContainer.addEventListener('drop', dropHandler);
 
   // Support Clipboard Paste (e.g. screenshots)
-  messageInput.addEventListener('paste', async (e) => {
+  const pasteHandler = async (e) => {
     const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
     if (!items) return;
     for (const item of items) {
@@ -587,6 +659,25 @@ export function initChat(requestId, userId) {
         }
       }
     }
-  });
-}
+  };
+  messageInput.addEventListener('paste', pasteHandler);
 
+  // Store active session reference with cleanup method
+  activeChatSession = {
+    requestId,
+    userId,
+    isAdmin,
+    render: () => syncFromLocalStorage(),
+    destroy: () => {
+      clearInterval(chatPollTimer);
+      window.removeEventListener('storage', storageHandler);
+      if (broadcastChannel) {
+        try { broadcastChannel.close(); } catch (e) {}
+      }
+      chatContainer.removeEventListener('dragover', dragOverHandler);
+      chatContainer.removeEventListener('dragleave', dragLeaveHandler);
+      chatContainer.removeEventListener('drop', dropHandler);
+      messageInput.removeEventListener('paste', pasteHandler);
+    }
+  };
+}

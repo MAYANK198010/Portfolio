@@ -7,11 +7,12 @@
   <meta name="robots" content="noindex, nofollow">
 
   <!-- Favicon & Site Icons (Supports Google Search Console 48px+ standard, Modern SVG, Retina & PWA) -->
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
   <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
@@ -134,8 +135,8 @@
     <!-- Collapsible Security Rules Helper (Appears if permission denied) -->
     <div id="ruleGuidePanel" style="display: none; margin-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.25rem;">
       <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; color: #fbbf24; font-size: 0.88rem; line-height: 1.5;">
-        <i class="fa-solid fa-circle-exclamation"></i> <strong>Why new requests only appeared on the client's device:</strong><br>
-        When clients submit requests from other devices, their browser attempts to write to Firebase (project: <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fff;">matnix-studios</code>). If the Firebase Console has default locked rules, Google's servers reject the write with <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fca5a5;">403 PERMISSION_DENIED</code>, causing the request to fall back into that device's local browser cache.
+        <i class="fa-solid fa-circle-exclamation"></i> <strong>Cloud Persistence Architecture:</strong><br>
+        Requests are persistently recorded to the backend database and synced to Firebase Firestore (project: <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fff;">gen-lang-client-0252012026</code>). Ensure rules permit client submissions and authorized admin reads.
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
@@ -177,7 +178,7 @@ service cloud.firestore {
 }</pre>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn secondary btn-sm" onclick="copyFirestoreRules()"><i class="fa-solid fa-copy"></i> Copy Rules</button>
-            <a href="https://console.firebase.google.com/project/matnix-studios/firestore/rules" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open Firebase Rules</a>
+            <a href="https://console.firebase.google.com/project/gen-lang-client-0252012026/firestore/rules" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open Firebase Rules</a>
           </div>
         </div>
 
@@ -212,7 +213,7 @@ service cloud.firestore {
 }</pre>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn secondary btn-sm" onclick="copyRtdbRules()"><i class="fa-solid fa-copy"></i> Copy Rules</button>
-            <a href="https://console.firebase.google.com/project/matnix-studios/database/matnix-studios-default-rtdb/rules" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open RTDB Rules</a>
+            <a href="https://console.firebase.google.com/project/gen-lang-client-0252012026/database" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open RTDB Console</a>
           </div>
         </div>
       </div>
@@ -260,6 +261,7 @@ service cloud.firestore {
     <button class="admin-tab-btn active" data-tab="requests" onclick="switchAdminTab('requests', event)"><i class="fa-solid fa-list-check"></i> Project Requests</button>
     <button class="admin-tab-btn" data-tab="users" onclick="switchAdminTab('users', event)"><i class="fa-solid fa-users"></i> User Management</button>
     <button class="admin-tab-btn" data-tab="admins" onclick="switchAdminTab('admins', event)"><i class="fa-solid fa-user-shield"></i> Admin Access</button>
+    <button class="admin-tab-btn" data-tab="emails" onclick="switchAdminTab('emails', event)"><i class="fa-solid fa-paper-plane"></i> Email Logs &amp; SMTP</button>
   </div>
 
   <!-- Requests Tab Content -->
@@ -415,6 +417,73 @@ service cloud.firestore {
           <span class="status completed" style="margin-bottom: 0;">Master</span>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Email Logs & SMTP Tab Content -->
+  <div id="emailsTabContent" style="display: none;">
+    <!-- SMTP Status Banner -->
+    <div class="card" style="margin-bottom: 1.5rem; text-align: left; border: 1px solid rgba(0, 240, 255, 0.3); background: rgba(15, 23, 42, 0.8);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <h3 style="color: #00f0ff; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.5rem;">
+            <i class="fa-solid fa-server"></i> SMTP Mail Server Status
+          </h3>
+          <p style="color: var(--text-secondary); margin: 0; font-size: 0.9rem;">
+            Host: <strong style="color: white;">smtp.zoho.in:465</strong> (SSL) &bull; Official Sender: <strong style="color: #00f0ff;">account@mayankzen.in</strong>
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <a href="https://mail.zoho.in/UnblockMe" target="_blank" rel="noopener noreferrer" class="btn secondary btn-sm" style="border-color: #facc15; color: #facc15;">
+            <i class="fa-solid fa-unlock-keyhole"></i> Zoho Unblock Portal
+          </a>
+          <button type="button" class="btn primary btn-sm" onclick="loadEmailLogs()">
+            <i class="fa-solid fa-rotate"></i> Refresh Logs
+          </button>
+        </div>
+      </div>
+      
+      <!-- Notice on Zoho external email unblock -->
+      <div style="margin-top: 1rem; padding: 0.85rem 1rem; background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 8px; font-size: 0.85rem; color: #fef08a; line-height: 1.5;">
+        <i class="fa-solid fa-circle-info"></i> <strong>Note on Zoho Outbound Deliverability:</strong>
+        When automated emails are sent to external accounts (like Gmail), Zoho Mail may trigger a temporary safety hold (<em>"Unusual sending activity detected"</em>).
+        To enable external delivery, log in to <strong>accounts@mayankzen.in</strong> and click the 
+        <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; font-weight: 700; text-decoration: underline;">Zoho Unblock Page</a>.
+      </div>
+    </div>
+
+    <!-- Quick Dispatch Test Form -->
+    <div class="card" style="margin-bottom: 1.5rem; text-align: left;">
+      <h4 style="color: var(--accent-green); margin-bottom: 0.75rem;"><i class="fa-solid fa-paper-plane"></i> Send Test Confirmation Email</h4>
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+        <input type="email" id="testEmailRecipient" placeholder="Enter recipient email (e.g. your email)" style="flex: 1; min-width: 250px; padding: 0.75rem 1rem; background: rgba(0,0,0,0.5); border: 1px solid var(--primary-purple); border-radius: 8px; color: white;">
+        <button id="sendTestEmailBtn" type="button" class="btn primary btn-sm" onclick="triggerTestEmail()">
+          <i class="fa-solid fa-paper-plane"></i> Send Test Email
+        </button>
+      </div>
+      <div id="testEmailStatus" style="margin-top: 0.75rem; display: none; font-size: 0.85rem;"></div>
+    </div>
+
+    <!-- Email Logs Table -->
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Recipient</th>
+            <th>Tracking ID</th>
+            <th>Service</th>
+            <th>Delivery Status</th>
+            <th>Error / Info</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="emailLogsTable">
+          <tr>
+            <td colspan="7" style="text-align: center; padding: 2rem;">Loading email dispatch records...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </main>

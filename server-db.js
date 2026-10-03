@@ -459,6 +459,27 @@ export const ServerDB = {
       fileSize: message.fileSize || null
     };
 
+    // Check for duplicate message (by ID or same sender, content and close timestamp)
+    const existingIndex = allMsgs[key].findIndex(existing => {
+      if (message.id && existing.id === message.id) return true;
+      const sameSender = existing.sender === msgRecord.sender;
+      const sameText = (existing.text || '').trim() === (msgRecord.text || '').trim();
+      const sameFile = msgRecord.fileId && existing.fileId === msgRecord.fileId;
+      const timeDiff = Math.abs((existing.timestamp || 0) - (msgRecord.timestamp || 0));
+      return sameSender && (sameText || sameFile) && timeDiff < 3500;
+    });
+
+    if (existingIndex >= 0) {
+      // Merge in any updated fields without duplicating
+      allMsgs[key][existingIndex] = {
+        ...allMsgs[key][existingIndex],
+        ...msgRecord,
+        id: allMsgs[key][existingIndex].id || msgRecord.id
+      };
+      writeJSON(PATHS.messages, allMsgs);
+      return allMsgs[key][existingIndex];
+    }
+
     allMsgs[key].push(msgRecord);
     writeJSON(PATHS.messages, allMsgs);
     return msgRecord;

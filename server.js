@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { ServerDB } from './server-db.js';
+import { sendServiceRequestConfirmationEmail, getEmailLogs } from './emailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,13 +72,89 @@ app.get('/api/db/requests/:id', (req, res) => {
   }
 });
 
-app.post('/api/db/requests', (req, res) => {
+app.post('/api/db/requests', async (req, res) => {
   try {
     const saved = ServerDB.saveRequest(req.body);
-    res.json({ success: true, data: saved });
+    
+    // Automatically trigger confirmation email to the client from account@mayankzen.in
+    let emailResult = null;
+    if (saved && saved.email) {
+      try {
+        emailResult = await sendServiceRequestConfirmationEmail(saved);
+      } catch (err) {
+        console.error('Failed to trigger confirmation email:', err);
+        emailResult = { success: false, error: err.message };
+      }
+    }
+
+    res.json({ success: true, data: saved, emailResult });
   } catch (err) {
     console.error('API save request error:', err);
     res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// Dedicated endpoint to send request confirmation email from account@mayankzen.in
+app.post('/api/send-confirmation-email', async (req, res) => {
+  try {
+    const requestData = req.body;
+    if (!requestData || !requestData.email) {
+      return res.status(400).json({ success: false, message: 'Recipient email is required.' });
+    }
+    const result = await sendServiceRequestConfirmationEmail(requestData);
+    res.json(result);
+  } catch (err) {
+    console.error('Confirmation email API error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Email Audit Logs Endpoint
+app.get('/api/email/logs', (req, res) => {
+  try {
+    const logs = getEmailLogs();
+    res.json({ success: true, count: logs.length, data: logs });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Trigger a Test Email Endpoint
+app.post('/api/email/test', async (req, res) => {
+  try {
+    const { recipient } = req.body;
+    if (!recipient) {
+      return res.status(400).json({ success: false, message: 'Recipient email address is required.' });
+    }
+    const testRequest = {
+      trackingId: 'TEST-' + Math.floor(1000 + Math.random() * 9000),
+      name: 'Test Client',
+      email: recipient.trim(),
+      service: 'Custom Engineering & Web Architecture',
+      budget: 1500,
+      status: 'Pending',
+      description: 'System connectivity verification from MayankZen Studios.'
+    };
+    const result = await sendServiceRequestConfirmationEmail(testRequest);
+    res.json(result);
+  } catch (err) {
+    console.error('Test email API error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Resend Confirmation Email by Tracking ID
+app.post('/api/email/resend/:trackingId', async (req, res) => {
+  try {
+    const request = ServerDB.getRequestById(req.params.trackingId);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Request not found' });
+    }
+    const result = await sendServiceRequestConfirmationEmail(request);
+    res.json(result);
+  } catch (err) {
+    console.error('Resend email API error:', err);
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 

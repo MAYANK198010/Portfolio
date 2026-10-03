@@ -31,11 +31,12 @@
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 
   <!-- Favicon & Site Icons (Supports Google Search Console 48px+ standard, Modern SVG, Retina & PWA) -->
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
   <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
@@ -305,12 +306,6 @@
     chatSection.style.display = 'block';
     const uid = auth.currentUser ? auth.currentUser.uid : 'client_' + data.trackingId;
     initChat(data.trackingId, uid);
-
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        initChat(data.trackingId, user.uid);
-      }
-    });
   }
 
   async function performTracking(rawTrackingId, email) {
@@ -322,19 +317,19 @@
 
     let foundData = null;
 
-    // 1. Check Firebase Realtime Database via direct HTTPS REST (Instant cross-device cloud lookup)
+    // 1. Check Server Database
     try {
-      const restRes = await fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(normalizedId)}.json`);
-      if (restRes.ok) {
-        const val = await restRes.json();
-        if (val && typeof val === 'object' && val.trackingId) {
-          if (!email || !email.trim() || (val.email && val.email.toLowerCase() === email.trim().toLowerCase())) {
-            foundData = val;
+      const srvRes = await fetch(`/api/db/requests/${encodeURIComponent(normalizedId)}`);
+      if (srvRes.ok) {
+        const json = await srvRes.json();
+        if (json.data && json.data.trackingId) {
+          if (!email || !email.trim() || (json.data.email && json.data.email.toLowerCase() === email.trim().toLowerCase())) {
+            foundData = json.data;
           }
         }
       }
-    } catch (restErr) {
-      console.debug('RTDB REST direct tracking notice:', restErr);
+    } catch (srvErr) {
+      console.debug('Server DB tracking notice:', srvErr);
     }
 
     // 2. Check Firebase Realtime Database via JS SDK

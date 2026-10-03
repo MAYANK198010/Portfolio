@@ -92,7 +92,7 @@ function showDomainAuthModal() {
         </div>
 
         <p style="color: #cbd5e1; font-size: 0.92rem; line-height: 1.6; margin-bottom: 1rem;">
-          Google popup sign-in requires this web host domain to be whitelisted in your Firebase Console project (<strong>matnix-studios</strong>):
+          Google popup sign-in requires this web host domain to be whitelisted in your Firebase Console project (<strong>gen-lang-client-0252012026</strong>):
         </p>
 
         <div style="background: rgba(0, 0, 0, 0.6); border: 1px solid var(--primary-purple); border-radius: 8px; padding: 0.75rem 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem;">
@@ -105,7 +105,7 @@ function showDomainAuthModal() {
         <div style="background: rgba(139, 92, 246, 0.1); border-left: 3px solid var(--primary-purple); padding: 0.85rem; border-radius: 0 8px 8px 0; margin-bottom: 1.5rem; font-size: 0.88rem; color: #e2e8f0;">
           <strong>Quick Setup Steps:</strong>
           <ol style="margin: 0.5rem 0 0 1.2rem; padding: 0; line-height: 1.5;">
-            <li>Go to <a href="https://console.firebase.google.com/project/matnix-studios/authentication/settings" target="_blank" style="color: var(--accent-green); text-decoration: underline;">Firebase Console &gt; Authentication &gt; Settings</a></li>
+            <li>Go to <a href="https://console.firebase.google.com/project/gen-lang-client-0252012026/authentication/settings" target="_blank" style="color: var(--accent-green); text-decoration: underline;">Firebase Console &gt; Authentication &gt; Settings</a></li>
             <li>Scroll to <strong>Authorized domains</strong> and click <strong>Add domain</strong></li>
             <li>Paste <code style="color: var(--accent-green);">${currentHost}</code> and Save</li>
           </ol>

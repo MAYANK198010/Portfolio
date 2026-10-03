@@ -1,5 +1,6 @@
 import fs from 'fs';
 import sharp from 'sharp';
+import toIco from 'to-ico';
 
 // 1. Standalone MZ Mark SVG (for Favicon and App Icon)
 const faviconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
@@ -319,36 +320,11 @@ async function generateRasters() {
     .png()
     .toFile('./favicon-16x16.png');
 
-  // 5. favicon.ico (True multi-resolution Windows ICO container with 16x16, 32x32, 48x48)
-  const icoSizes = [16, 32, 48];
-  const pngBuffers = [];
-  for (const s of icoSizes) {
-    const buf = await sharp(faviconBuffer).resize(s, s).png().toBuffer();
-    pngBuffers.push({ size: s, buf });
-  }
-  const numImages = pngBuffers.length;
-  const headerSize = 6 + (16 * numImages);
-  let totalSize = headerSize;
-  for (const item of pngBuffers) totalSize += item.buf.length;
-  const ico = Buffer.alloc(totalSize);
-  ico.writeUInt16LE(0, 0); // reserved
-  ico.writeUInt16LE(1, 2); // type 1 = icon
-  ico.writeUInt16LE(numImages, 4); // count
-  let currentOffset = headerSize;
-  for (let i = 0; i < numImages; i++) {
-    const { size, buf } = pngBuffers[i];
-    const entryOffset = 6 + (i * 16);
-    ico.writeUInt8(size >= 256 ? 0 : size, entryOffset);
-    ico.writeUInt8(size >= 256 ? 0 : size, entryOffset + 1);
-    ico.writeUInt8(0, entryOffset + 2);
-    ico.writeUInt8(0, entryOffset + 3);
-    ico.writeUInt16LE(1, entryOffset + 4);
-    ico.writeUInt16LE(32, entryOffset + 6);
-    ico.writeUInt32LE(buf.length, entryOffset + 8);
-    ico.writeUInt32LE(currentOffset, entryOffset + 12);
-    buf.copy(ico, currentOffset);
-    currentOffset += buf.length;
-  }
+  // 5. favicon.ico (True multi-resolution Windows standard DIB/BMP ICO container with 16x16, 32x32, 48x48)
+  const icoBuf16 = await sharp(faviconBuffer).resize(16, 16).png().toBuffer();
+  const icoBuf32 = await sharp(faviconBuffer).resize(32, 32).png().toBuffer();
+  const icoBuf48 = await sharp(faviconBuffer).resize(48, 48).png().toBuffer();
+  const ico = await toIco([icoBuf16, icoBuf32, icoBuf48]);
   fs.writeFileSync('./favicon.ico', ico);
 
   // 6. logo.png (1200x400 high resolution)

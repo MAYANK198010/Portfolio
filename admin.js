@@ -160,61 +160,7 @@ async function loadRequests(silent = false) {
     console.debug("Server DB requests fetch notice:", apiErr);
   }
 
-  // 2. Fetch directly from Firebase Realtime Database via HTTPS REST (Universal cross-device cloud persistence)
-  try {
-    const rtdbRestRes = await fetch('https://matnix-studios-default-rtdb.firebaseio.com/service_requests.json');
-    if (rtdbRestRes.ok) {
-      const val = await rtdbRestRes.json();
-      if (val && typeof val === 'object') {
-        Object.keys(val).forEach(key => {
-          const item = val[key];
-          if (item) {
-            const tId = item.trackingId || key;
-            const existing = requestsMap.get(tId) || {};
-            requestsMap.set(tId, {
-              id: tId,
-              ...existing,
-              ...item
-            });
-          }
-        });
-      }
-    }
-  } catch (rtdbRestErr) {
-    console.debug("Realtime DB REST fetch notice:", rtdbRestErr);
-  }
-
-  // 3. Fetch from Firestore REST API (Works cross-device on static GitHub Pages)
-  try {
-    const fsRestRes = await fetch('https://firestore.googleapis.com/v1/projects/matnix-studios/databases/(default)/documents/service_requests?key=AIzaSyBMNfCZ2LSVkCWVmJ9w2jYKG8PHaDYUyfI');
-    if (fsRestRes.ok) {
-      const fsJson = await fsRestRes.json();
-      if (fsJson.documents && Array.isArray(fsJson.documents)) {
-        fsJson.documents.forEach(docItem => {
-          const f = docItem.fields || {};
-          const tId = f.trackingId?.stringValue || docItem.name.split('/').pop();
-          const existing = requestsMap.get(tId) || {};
-          requestsMap.set(tId, {
-            id: tId,
-            ...existing,
-            trackingId: tId,
-            name: f.name?.stringValue || existing.name || '',
-            email: f.email?.stringValue || existing.email || '',
-            mobile: f.mobile?.stringValue || existing.mobile || '',
-            service: f.service?.stringValue || existing.service || 'Web Development',
-            budget: f.budget?.integerValue ? Number(f.budget.integerValue) : (existing.budget || 0),
-            description: f.description?.stringValue || existing.description || '',
-            status: f.status?.stringValue || existing.status || 'Pending',
-            createdAt: f.createdAt?.stringValue || existing.createdAt || ''
-          });
-        });
-      }
-    }
-  } catch (fsRestErr) {
-    console.debug("Firestore REST fetch notice:", fsRestErr);
-  }
-
-  // 4. Read local cached requests if any
+  // 2. Read local cached requests if any
   try {
     const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
     localList.forEach(r => {
@@ -462,15 +408,7 @@ function renderTable(requests) {
           }
         }
 
-        // 3. Update Firebase Realtime Database (via SDK and REST for instant cross-device delivery)
-        try {
-          fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(targetKey)}.json`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus, updatedAt: Date.now() })
-          }).catch(e => console.debug('RTDB REST update notice:', e));
-        } catch (e) {}
-
+        // 3. Update Firebase Realtime Database via SDK if configured
         if (realtimeDb) {
           try {
             await rtdbUpdate(rtdbChild(rtdbRef(realtimeDb), `service_requests/${targetKey}`), {
@@ -700,13 +638,7 @@ window.deleteRequestRecord = async function(id) {
       }
     }
 
-    // 3. Delete from Firebase Realtime Database (via SDK & REST)
-    try {
-      fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(targetKey)}.json`, {
-        method: 'DELETE'
-      }).catch(e => console.debug('RTDB REST delete notice:', e));
-    } catch (e) {}
-
+    // 3. Delete from Firebase Realtime Database via SDK if configured
     if (realtimeDb) {
       try {
         await rtdbRemove(rtdbChild(rtdbRef(realtimeDb), `service_requests/${targetKey}`));
@@ -1119,10 +1051,12 @@ window.switchAdminTab = function(tabName, evt) {
   const requestsTab = document.getElementById('requestsTabContent');
   const usersTab = document.getElementById('usersTabContent');
   const adminsTab = document.getElementById('adminsTabContent');
+  const emailsTab = document.getElementById('emailsTabContent');
 
   if (requestsTab) requestsTab.style.display = tabName === 'requests' ? 'block' : 'none';
   if (usersTab) usersTab.style.display = tabName === 'users' ? 'block' : 'none';
   if (adminsTab) adminsTab.style.display = tabName === 'admins' ? 'block' : 'none';
+  if (emailsTab) emailsTab.style.display = tabName === 'emails' ? 'block' : 'none';
 
   if (tabName === 'users') {
     loadUsers();
@@ -1130,6 +1064,138 @@ window.switchAdminTab = function(tabName, evt) {
     loadApprovedAdmins();
   } else if (tabName === 'requests') {
     loadRequests();
+  } else if (tabName === 'emails') {
+    loadEmailLogs();
+  }
+};
+
+// Email Logs & SMTP Management
+window.loadEmailLogs = async function() {
+  const tbody = document.getElementById('emailLogsTable');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem;"><span class="loading"></span> Fetching dispatch records...</td></tr>';
+  
+  try {
+    const res = await fetch('/api/email/logs');
+    if (!res.ok) throw new Error('Failed to fetch email logs');
+    const json = await res.json();
+    const logs = json.data || [];
+
+    if (logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No email dispatches recorded yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = logs.map(log => {
+      const timeStr = log.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A';
+      const statusBadge = log.sentLive
+        ? `<span class="status completed" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);"><i class="fa-solid fa-check"></i> Sent Live</span>`
+        : (log.unblockRequired
+            ? `<span class="status pending" style="background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4);"><i class="fa-solid fa-triangle-exclamation"></i> Unblock Needed</span>`
+            : `<span class="status in-review" style="background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4);"><i class="fa-solid fa-clock"></i> Queued</span>`);
+
+      const errInfo = log.error 
+        ? `<span style="color: #f87171; font-size: 0.8rem; word-break: break-all;">${escapeHtml(log.error)}</span>`
+        : `<span style="color: #34d399; font-size: 0.8rem;"><i class="fa-solid fa-circle-check"></i> Accepted by SMTP</span>`;
+
+      return `
+        <tr>
+          <td style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${timeStr}</td>
+          <td><strong>${escapeHtml(log.recipient || 'N/A')}</strong></td>
+          <td><span style="font-family: monospace; color: #00f0ff;">${escapeHtml(log.trackingId || 'N/A')}</span></td>
+          <td style="font-size: 0.85rem;">${escapeHtml(log.service || 'N/A')}</td>
+          <td>${statusBadge}</td>
+          <td style="max-width: 250px;">${errInfo}</td>
+          <td>
+            <button class="btn secondary btn-sm" onclick="resendConfirmationEmail('${escapeHtml(log.trackingId)}')">
+              <i class="fa-solid fa-rotate-right"></i> Resend
+            </button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #f87171; padding: 2rem;">Error: ${err.message}</td></tr>`;
+  }
+};
+
+window.triggerTestEmail = async function() {
+  const input = document.getElementById('testEmailRecipient');
+  const btn = document.getElementById('sendTestEmailBtn');
+  const statusDiv = document.getElementById('testEmailStatus');
+  const email = (input?.value || '').trim();
+
+  if (!email) {
+    showToast('Please enter an email address to send test email', 'error');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+  if (statusDiv) {
+    statusDiv.style.display = 'block';
+    statusDiv.style.color = 'var(--text-secondary)';
+    statusDiv.innerHTML = 'Connecting to Zoho SMTP server...';
+  }
+
+  try {
+    const res = await fetch('/api/email/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient: email })
+    });
+    const data = await res.json();
+
+    if (data.sentLive) {
+      showToast(`Test email successfully delivered to ${email}!`, 'success');
+      if (statusDiv) {
+        statusDiv.style.color = '#34d399';
+        statusDiv.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Success:</strong> Live confirmation email dispatched to <strong>${email}</strong> from <strong>account@mayankzen.in</strong>! Check inbox/spam.`;
+      }
+    } else if (data.unblockRequired) {
+      showToast('Zoho outbound unblock required for external email', 'warning');
+      if (statusDiv) {
+        statusDiv.style.color = '#facc15';
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Zoho Unblock Required:</strong> Zoho requires a one-time verification for external domains. <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock outbound emails at mail.zoho.in/UnblockMe</a>. Note: Internal copy to accounts@mayankzen.in was delivered successfully!`;
+      }
+    } else {
+      showToast(`Email status: ${data.status || 'Queued'}`, 'info');
+      if (statusDiv) {
+        statusDiv.style.color = '#cbd5e1';
+        statusDiv.innerHTML = `<i class="fa-solid fa-info-circle"></i> Result: ${data.error || 'Dispatched and logged in database.'}`;
+      }
+    }
+    loadEmailLogs();
+  } catch (err) {
+    showToast('Failed to dispatch test email: ' + err.message, 'error');
+    if (statusDiv) {
+      statusDiv.style.color = '#f87171';
+      statusDiv.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Failed: ${err.message}`;
+    }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Test Email';
+  }
+};
+
+window.resendConfirmationEmail = async function(trackingId) {
+  if (!trackingId || trackingId === 'N/A') return;
+  showToast(`Resending email for ${trackingId}...`, 'info');
+  try {
+    const res = await fetch(`/api/email/resend/${encodeURIComponent(trackingId)}`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (data.sentLive) {
+      showToast(`Confirmation email for ${trackingId} resent successfully!`, 'success');
+    } else if (data.unblockRequired) {
+      showToast(`Zoho unblock needed: Visit mail.zoho.in/UnblockMe`, 'warning');
+    } else {
+      showToast(`Email trigger recorded (${data.status || 'queued'})`, 'info');
+    }
+    loadEmailLogs();
+  } catch (e) {
+    showToast('Resend failed: ' + e.message, 'error');
   }
 };
 
@@ -1378,15 +1444,12 @@ async function checkDatabaseHealth() {
   let firestoreOk = false;
   let rtdbOk = false;
 
-  // 1. Test Firestore (via SDK, fallback to REST)
+  // 1. Test Firestore via SDK
   try {
     await getDocs(collection(db, "service_requests"));
     firestoreOk = true;
   } catch (fsErr) {
-    try {
-      const restTest = await fetch('https://firestore.googleapis.com/v1/projects/matnix-studios/databases/(default)/documents/service_requests?key=AIzaSyBMNfCZ2LSVkCWVmJ9w2jYKG8PHaDYUyfI');
-      if (restTest.ok) firestoreOk = true;
-    } catch (e) {}
+    console.debug("Firestore test notice:", fsErr?.message || fsErr);
   }
 
   if (fsBadge) {
@@ -1399,28 +1462,22 @@ async function checkDatabaseHealth() {
       fsBadge.style.background = 'rgba(239, 68, 68, 0.2)';
       fsBadge.style.color = '#fca5a5';
       fsBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
-      fsBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Firestore: Permission Denied';
+      fsBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Firestore: Check Rules';
     }
   }
 
-  // 2. Test Realtime Database (via SDK, fallback to REST)
+  // 2. Test Realtime Database / Server Persistence
   try {
     if (realtimeDb) {
       await rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
       rtdbOk = true;
+    } else {
+      // If Realtime DB is not configured, check persistent server DB
+      const srvCheck = await fetch('/api/db/requests');
+      if (srvCheck.ok) rtdbOk = true;
     }
   } catch (rtErr) {
-    try {
-      const restRt = await fetch('https://matnix-studios-default-rtdb.firebaseio.com/service_requests.json');
-      if (restRt.ok) rtdbOk = true;
-    } catch (e) {}
-  }
-
-  if (!rtdbOk) {
-    try {
-      const restRt = await fetch('https://matnix-studios-default-rtdb.firebaseio.com/service_requests.json');
-      if (restRt.ok) rtdbOk = true;
-    } catch (e) {}
+    console.debug("Secondary DB check notice:", rtErr);
   }
 
   if (rtdbBadge) {
@@ -1428,12 +1485,12 @@ async function checkDatabaseHealth() {
       rtdbBadge.style.background = 'rgba(16, 185, 129, 0.2)';
       rtdbBadge.style.color = '#34d399';
       rtdbBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
-      rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Realtime DB: Connected';
+      rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Persistence: Active';
     } else {
       rtdbBadge.style.background = 'rgba(239, 68, 68, 0.2)';
       rtdbBadge.style.color = '#fca5a5';
       rtdbBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
-      rtdbBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Realtime DB: Permission Denied';
+      rtdbBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Persistence: Standby';
     }
   }
 

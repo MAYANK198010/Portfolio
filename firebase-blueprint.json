@@ -1,0 +1,139 @@
+{
+  "entities": {
+    "ServiceRequest": {
+      "title": "ServiceRequest",
+      "description": "Client service project requests submitted through the portal",
+      "type": "object",
+      "properties": {
+        "trackingId": {
+          "type": "string",
+          "description": "Unique tracking identifier (e.g. MS-12345)",
+          "maxLength": 64
+        },
+        "name": {
+          "type": "string",
+          "description": "Client full name",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "Client contact email",
+          "format": "email",
+          "maxLength": 256
+        },
+        "mobile": {
+          "type": "string",
+          "description": "Client phone number",
+          "maxLength": 32
+        },
+        "service": {
+          "type": "string",
+          "description": "Requested service category",
+          "maxLength": 128
+        },
+        "budget": {
+          "type": "number",
+          "description": "Estimated budget in USD or INR"
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed project description",
+          "maxLength": 5000
+        },
+        "status": {
+          "type": "string",
+          "description": "Request progress status",
+          "enum": ["Pending", "In Review", "In Progress", "Completed", "Cancelled"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp of creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last update"
+        },
+        "clientNotes": {
+          "type": "string",
+          "description": "Internal notes by admin or client",
+          "maxLength": 2000
+        }
+      },
+      "required": ["trackingId", "name", "service", "status"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and role metadata",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID",
+          "maxLength": 128
+        },
+        "email": {
+          "type": "string",
+          "description": "User email address",
+          "format": "email",
+          "maxLength": 256
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "description": "User role permissions",
+          "enum": ["admin", "client", "user"]
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Account registration date"
+        }
+      },
+      "required": ["uid", "email"]
+    },
+    "ApprovedAdmin": {
+      "title": "ApprovedAdmin",
+      "description": "Allowlisted administrator emails",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Allowlisted admin email address",
+          "format": "email",
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "description": "Administrator role",
+          "maxLength": 64
+        },
+        "addedAt": {
+          "type": "string",
+          "description": "Timestamp when added"
+        },
+        "addedBy": {
+          "type": "string",
+          "description": "UID or email of granter"
+        }
+      },
+      "required": ["email"]
+    }
+  },
+  "firestore": {
+    "/service_requests/{requestId}": {
+      "schema": "ServiceRequest",
+      "description": "Public client request submissions and tracking records"
+    },
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Registered client and team user accounts"
+    },
+    "/approvedAdmins/{adminId}": {
+      "schema": "ApprovedAdmin",
+      "description": "Allowlisted admin emails for dashboard access control"
+    }
+  }
+}
