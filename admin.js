@@ -1156,7 +1156,7 @@ window.triggerTestEmail = async function() {
       showToast('Zoho outbound unblock required for external email', 'warning');
       if (statusDiv) {
         statusDiv.style.color = '#facc15';
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Zoho Unblock Required:</strong> Zoho requires a one-time verification for external domains. <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock outbound emails at mail.zoho.in/UnblockMe</a>. Note: Internal copy to accounts@mayankzen.in was delivered successfully!`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Zoho Unblock Required:</strong> Zoho requires a one-time verification for external domains. <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock outbound emails at mail.zoho.in/UnblockMe</a>.`;
       }
     } else {
       showToast(`Email status: ${data.status || 'Queued'}`, 'info');

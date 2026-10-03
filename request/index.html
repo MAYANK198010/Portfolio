@@ -151,6 +151,9 @@
       <div class="form-group">
         <label for="email"><i class="fa-solid fa-envelope"></i> Email Address *</label>
         <input type="email" id="email" placeholder="client@example.com" required>
+        <small style="color: var(--text-secondary); font-size: 0.8rem; display: block; margin-top: 0.35rem;">
+          <i class="fa-solid fa-paper-plane" style="color: var(--accent-green);"></i> Project confirmation &amp; real-time updates are sent to this address.
+        </small>
       </div>
     </div>
 
@@ -370,16 +373,22 @@
     initChat(reqId, uid);
   }
 
-  // Pre-fill logged-in user info in request form
+  // Pre-fill logged-in client info (only for client accounts, not admin credentials)
   onAuthStateChanged(auth, (user) => {
-    if (user) {
-      const emailField = document.getElementById('email');
-      const nameField = document.getElementById('name');
-      if (emailField && !emailField.value && user.email) {
-        emailField.value = user.email;
-      }
-      if (nameField && !nameField.value && user.displayName) {
-        nameField.value = user.displayName;
+    if (user && user.email) {
+      const emailLower = user.email.toLowerCase().trim();
+      const isAdminAccount = emailLower === 'mayank198010@gmail.com' || emailLower === 'admin@mayankzen.in';
+      
+      // Never auto-fill the admin's personal address; keep field open for client's provided email
+      if (!isAdminAccount) {
+        const emailField = document.getElementById('email');
+        const nameField = document.getElementById('name');
+        if (emailField && !emailField.value) {
+          emailField.value = user.email;
+        }
+        if (nameField && !nameField.value && user.displayName) {
+          nameField.value = user.displayName;
+        }
       }
     }
   });
@@ -588,11 +597,11 @@
       if (emailBadge && email) {
         emailBadge.style.display = 'block';
         if (mailResult && mailResult.sentLive) {
-          emailBadge.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Official Confirmation Sent</strong>: An automated email with Tracking ID <strong>${trackingId}</strong> and status <strong>Pending</strong> was sent from <strong>account@mayankzen.in</strong> to <span style="text-decoration: underline;">${email}</span>. Please check your inbox and spam folder.`;
+          emailBadge.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Confirmation Email Dispatched</strong>: A project confirmation with Tracking ID <strong>${trackingId}</strong> has been sent from <strong>account@mayankzen.in</strong> directly to your provided email: <span style="color: #93c5fd; font-weight: 700;">${email}</span>.`;
         } else if (mailResult && mailResult.unblockRequired) {
-          emailBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #facc15; margin-right: 0.35rem;"></i> <strong>Request Confirmed [${trackingId}]</strong>: Your service request is safely registered! Note: Outbound email relay from Zoho requires a quick unblock: <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock Zoho outbound sending</a>. Studio admin has been notified.`;
+          emailBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #facc15; margin-right: 0.35rem;"></i> <strong>Request Confirmed [${trackingId}]</strong>: Your service request is safely registered! Note: Zoho outbound email requires a one-time unblock: <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to verify outbound sending</a>.`;
         } else {
-          emailBadge.innerHTML = `<i class="fa-solid fa-paper-plane" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Request Registered [${trackingId}]</strong>: Confirmation queued for dispatch to <span style="text-decoration: underline;">${email}</span>. Studio admin has received your brief.`;
+          emailBadge.innerHTML = `<i class="fa-solid fa-paper-plane" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Request Registered [${trackingId}]</strong>: Confirmation email queued for dispatch to <span style="color: #93c5fd; font-weight: 700;">${email}</span>.`;
         }
       }
 
