@@ -102,7 +102,27 @@ window.loadUserRequests = async function() {
     console.debug("Server DB request query note:", srvErr);
   }
 
-  // 2. Load from local storage matching user email
+  // 2. Load directly from Firebase Realtime Database via HTTPS REST (Universal cloud store)
+  try {
+    const rtdbRestRes = await fetch('https://matnix-studios-default-rtdb.firebaseio.com/service_requests.json');
+    if (rtdbRestRes.ok) {
+      const val = await rtdbRestRes.json();
+      if (val && typeof val === 'object') {
+        Object.keys(val).forEach(key => {
+          const item = val[key];
+          if (item && item.email && currentUser.email && item.email.toLowerCase() === currentUser.email.toLowerCase()) {
+            const tId = item.trackingId || key;
+            const existing = requestsMap.get(tId) || {};
+            requestsMap.set(tId, { id: tId, ...existing, ...item });
+          }
+        });
+      }
+    }
+  } catch (rtdbRestErr) {
+    console.debug("Dashboard RTDB REST query note:", rtdbRestErr);
+  }
+
+  // 3. Load from local storage matching user email
   try {
     const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
     localList.forEach(r => {

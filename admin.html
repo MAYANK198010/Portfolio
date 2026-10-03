@@ -6,11 +6,13 @@
   <title>Studio Monitoring Dashboard | MayankZen Studios Admin</title>
   <meta name="robots" content="noindex, nofollow">
 
-  <!-- Favicon & Site Icons -->
+  <!-- Favicon & Site Icons (Supports Google Search Console 48px+ standard, Modern SVG, Retina & PWA) -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
 
@@ -138,13 +140,38 @@
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
         <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(139,92,246,0.3); border-radius: 10px; padding: 1rem;">
-          <h4 style="color: var(--primary-purple); font-size: 0.95rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-fire"></i> 1. Publish Firestore Rules</h4>
-          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Open Firebase Console and publish read/write rules:</p>
+          <h4 style="color: var(--primary-purple); font-size: 0.95rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-fire"></i> 1. Publish Secure Firestore Rules</h4>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Allows client submissions and tracking, locks deletions to admin:</p>
           <pre style="background: rgba(15,23,42,0.9); padding: 0.75rem; border-radius: 6px; font-size: 0.78rem; color: #a78bfa; overflow-x: auto; margin-bottom: 0.75rem;">rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'admin@mayankzen.in' ||
+        request.auth.token.email == 'mayank198010@gmail.com'
+      );
+    }
+    match /service_requests/{requestId} {
+      allow read: if true;
+      allow create: if request.resource.data.trackingId is string;
+      allow update, delete: if isAdmin();
+    }
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+    match /approvedAdmins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /chat_rooms/{roomId} {
       allow read, write: if true;
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }</pre>
@@ -155,12 +182,32 @@ service cloud.firestore {
         </div>
 
         <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 1rem;">
-          <h4 style="color: var(--accent-green); font-size: 0.95rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-bolt"></i> 2. Publish Realtime DB Rules</h4>
-          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Open Realtime Database and set read/write to true:</p>
+          <h4 style="color: var(--accent-green); font-size: 0.95rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-bolt"></i> 2. Publish Secure Realtime DB Rules</h4>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Permits verified request creations while guarding against overwrites:</p>
           <pre style="background: rgba(15,23,42,0.9); padding: 0.75rem; border-radius: 6px; font-size: 0.78rem; color: #34d399; overflow-x: auto; margin-bottom: 0.75rem;">{
   "rules": {
-    ".read": true,
-    ".write": true
+    "service_requests": {
+      ".read": true,
+      "$requestId": {
+        ".write": "!data.exists() || (auth != null && (auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com'))",
+        ".validate": "newData.hasChildren(['trackingId', 'name', 'email'])"
+      }
+    },
+    "chats": {
+      ".read": true,
+      "$requestId": {
+        "$messageId": {
+          ".write": "!data.exists()",
+          ".validate": "newData.hasChildren(['sender', 'timestamp'])"
+        }
+      }
+    },
+    "users": {
+      "$userId": {
+        ".read": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')",
+        ".write": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')"
+      }
+    }
   }
 }</pre>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">

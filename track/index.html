@@ -30,11 +30,13 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 
-  <!-- Favicon & Site Icons -->
+  <!-- Favicon & Site Icons (Supports Google Search Console 48px+ standard, Modern SVG, Retina & PWA) -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
 
@@ -320,19 +322,36 @@
 
     let foundData = null;
 
-    // 1. Check Firebase Realtime Database (fast cloud lookups)
+    // 1. Check Firebase Realtime Database via direct HTTPS REST (Instant cross-device cloud lookup)
     try {
-      if (realtimeDb) {
-        const rtdbSnap = await rtdbGet(rtdbChild(rtdbRef(realtimeDb), `service_requests/${normalizedId}`));
-        if (rtdbSnap.exists()) {
-          const val = rtdbSnap.val();
+      const restRes = await fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(normalizedId)}.json`);
+      if (restRes.ok) {
+        const val = await restRes.json();
+        if (val && typeof val === 'object' && val.trackingId) {
           if (!email || !email.trim() || (val.email && val.email.toLowerCase() === email.trim().toLowerCase())) {
             foundData = val;
           }
         }
       }
-    } catch (rtdbErr) {
-      console.debug('Realtime DB lookup notice:', rtdbErr?.message || rtdbErr);
+    } catch (restErr) {
+      console.debug('RTDB REST direct tracking notice:', restErr);
+    }
+
+    // 2. Check Firebase Realtime Database via JS SDK
+    if (!foundData) {
+      try {
+        if (realtimeDb) {
+          const rtdbSnap = await rtdbGet(rtdbChild(rtdbRef(realtimeDb), `service_requests/${normalizedId}`));
+          if (rtdbSnap.exists()) {
+            const val = rtdbSnap.val();
+            if (!email || !email.trim() || (val.email && val.email.toLowerCase() === email.trim().toLowerCase())) {
+              foundData = val;
+            }
+          }
+        }
+      } catch (rtdbErr) {
+        console.debug('Realtime DB SDK lookup notice:', rtdbErr?.message || rtdbErr);
+      }
     }
 
     // 2. Check Server Database for persistent records

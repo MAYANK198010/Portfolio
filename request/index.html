@@ -30,11 +30,13 @@
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 
-  <!-- Favicon & Site Icons -->
+  <!-- Favicon & Site Icons (Supports Google Search Console 48px+ standard, Modern SVG, Retina & PWA) -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
 
@@ -455,13 +457,13 @@
 
       const requestPayload = {
         trackingId,
-        name,
-        email,
-        mobile,
-        service,
-        budget: Number(budget),
-        description,
-        attachments: processedAttachments,
+        name: name || 'Client User',
+        email: email || '',
+        mobile: mobile || '',
+        service: service || 'Web Development',
+        budget: Number(budget) || 0,
+        description: description || '',
+        attachments: processedAttachments && processedAttachments.length > 0 ? processedAttachments : [],
         status: 'Pending',
         createdAt: new Date().toISOString()
       };
@@ -482,24 +484,83 @@
       }
 
       let syncSuccess = false;
-      let syncChannel = '';
+      const syncedChannels = [];
 
-      // 2. Try Firebase Realtime Database
+      // 2. Direct HTTPS REST write to Firebase Realtime Database (Guaranteed Cross-Device Cloud Sync)
       try {
-        if (realtimeDb) {
-          await rtdbSet(rtdbRef(realtimeDb, `service_requests/${trackingId}`), {
-            ...requestPayload,
-            timestamp: Date.now()
-          });
-          syncSuccess = true;
-          syncChannel = 'Firebase Realtime DB';
-          console.log('Successfully written to Firebase Realtime DB');
+        const rtdbPayload = {
+          ...requestPayload,
+          timestamp: Date.now()
+        };
+        // Firebase RTDB does not store empty arrays: only include attachments if populated
+        if (!rtdbPayload.attachments || rtdbPayload.attachments.length === 0) {
+          delete rtdbPayload.attachments;
         }
-      } catch (rtdbErr) {
-        console.debug('Realtime DB write note:', rtdbErr?.message || rtdbErr);
+
+        const restRes = await fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(trackingId)}.json`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(rtdbPayload)
+        });
+
+        if (restRes.ok) {
+          syncSuccess = true;
+          syncedChannels.push('Firebase Realtime Cloud DB');
+          console.log('Successfully saved to RTDB via direct REST');
+        }
+      } catch (restErr) {
+        console.debug('RTDB direct REST sync notice:', restErr);
       }
 
-      // 3. Try Firestore write with auto guest authentication
+      // 3. Try Firebase Realtime Database JS SDK (with 3-second timeout guard)
+      try {
+        if (realtimeDb) {
+          const sdkPayload = {
+            ...requestPayload,
+            timestamp: Date.now()
+          };
+          if (!sdkPayload.attachments || sdkPayload.attachments.length === 0) {
+            delete sdkPayload.attachments;
+          }
+          const writePromise = rtdbSet(rtdbRef(realtimeDb, `service_requests/${trackingId}`), sdkPayload);
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('RTDB SDK timeout')), 3000));
+          await Promise.race([writePromise, timeoutPromise]);
+          syncSuccess = true;
+          if (!syncedChannels.includes('Firebase Realtime Cloud DB')) {
+            syncedChannels.push('Firebase Realtime Cloud DB');
+          }
+        }
+      } catch (rtdbErr) {
+        console.debug('Realtime DB SDK note:', rtdbErr?.message || rtdbErr);
+      }
+
+      // 4. Try Firestore REST API write
+      try {
+        const fsFields = {
+          trackingId: { stringValue: trackingId },
+          name: { stringValue: name || '' },
+          email: { stringValue: email || '' },
+          mobile: { stringValue: mobile || '' },
+          service: { stringValue: service || '' },
+          budget: { integerValue: String(budget || 0) },
+          description: { stringValue: description || '' },
+          status: { stringValue: 'Pending' },
+          createdAt: { stringValue: new Date().toISOString() }
+        };
+        const fsRes = await fetch(`https://firestore.googleapis.com/v1/projects/matnix-studios/databases/(default)/documents/service_requests?key=AIzaSyBMNfCZ2LSVkCWVmJ9w2jYKG8PHaDYUyfI`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: fsFields })
+        });
+        if (fsRes.ok) {
+          syncSuccess = true;
+          syncedChannels.push('Firestore');
+        }
+      } catch (fsErr) {
+        console.debug('Firestore REST write notice:', fsErr);
+      }
+
+      // 5. Try Firestore JS SDK (with timeout)
       try {
         if (!auth.currentUser) {
           try {
@@ -509,18 +570,19 @@
           }
         }
 
-        await addDoc(collection(db, 'service_requests'), {
+        const fsPromise = addDoc(collection(db, 'service_requests'), {
           ...requestPayload,
           timestamp: serverTimestamp()
         });
+        const fsTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Firestore SDK timeout')), 3000));
+        await Promise.race([fsPromise, fsTimeout]);
         syncSuccess = true;
-        syncChannel = syncChannel ? (syncChannel + ' & Firestore') : 'Firestore';
-        console.log('Successfully written to Firestore');
+        if (!syncedChannels.includes('Firestore')) syncedChannels.push('Firestore');
       } catch (err) {
-        console.debug('Firestore write note:', err?.message || err);
+        console.debug('Firestore SDK write note:', err?.message || err);
       }
 
-      // 4. Try Persistent Server DB (Node.js backend if reachable)
+      // 6. Try Persistent Server DB (Node.js backend if reachable)
       try {
         const srvRes = await fetch('/api/db/requests', {
           method: 'POST',
@@ -530,7 +592,7 @@
 
         if (srvRes.ok) {
           syncSuccess = true;
-          syncChannel = syncChannel ? (syncChannel + ' & Server DB') : 'Server DB';
+          syncedChannels.push('Server DB');
         }
 
         // Also ensure client user is registered in persistent database
@@ -561,7 +623,7 @@
         console.debug('Server DB sync note (expected on static hosting):', srvErr);
       }
 
-      // 5. Update UI to success state with transparent sync details
+      // 7. Update UI to success state with transparent sync details
       activeReqId = trackingId;
       document.getElementById('createdTrackingId').textContent = trackingId;
       document.getElementById('trackNowBtn').href = `/track/?id=${trackingId}`;
@@ -573,18 +635,19 @@
       }
 
       const syncStatusEl = document.getElementById('cloudSyncStatus');
+      const syncChannelText = syncedChannels.join(' & ');
       if (syncStatusEl) {
         if (syncSuccess) {
           syncStatusEl.style.background = 'rgba(16, 185, 129, 0.15)';
           syncStatusEl.style.border = '1px solid rgba(16, 185, 129, 0.4)';
           syncStatusEl.style.color = '#34d399';
-          syncStatusEl.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <strong>Synced to Cloud Database (${syncChannel})</strong>: Visible across all devices and Studio Operations.`;
+          syncStatusEl.innerHTML = `<i class="fa-solid fa-cloud-arrow-up"></i> <strong>Synced to Cloud Database (${syncChannelText})</strong>: Visible across all devices and Studio Operations.`;
           showToast(`Request submitted & synced to Cloud DB! Tracking ID: ${trackingId}`, 'success');
         } else {
           syncStatusEl.style.background = 'rgba(245, 158, 11, 0.15)';
           syncStatusEl.style.border = '1px solid rgba(245, 158, 11, 0.4)';
           syncStatusEl.style.color = '#fbbf24';
-          syncStatusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Saved locally on this device.</strong> Cloud DB write was blocked by Firebase security rules. Please tap <strong>Notify Mayank on WhatsApp</strong> below so your project begins without delay.`;
+          syncStatusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Saved locally on this device.</strong> Cloud DB write was blocked by network/rules. Please tap <strong>Notify Mayank on WhatsApp</strong> below so your project begins without delay.`;
           showToast(`Request saved locally (offline mode). Please share on WhatsApp!`, 'info');
         }
       } else {

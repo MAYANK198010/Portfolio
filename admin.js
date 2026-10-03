@@ -145,7 +145,7 @@ async function loadRequests(silent = false) {
 
   let requestsMap = new Map();
 
-  // 1. Fetch from Persistent Server Database (primary source across devices)
+  // 1. Fetch from Persistent Server Database (primary source when Node backend is active)
   try {
     const res = await fetch('/api/db/requests');
     if (res.ok) {
@@ -160,7 +160,61 @@ async function loadRequests(silent = false) {
     console.debug("Server DB requests fetch notice:", apiErr);
   }
 
-  // 2. Read local cached requests if any
+  // 2. Fetch directly from Firebase Realtime Database via HTTPS REST (Universal cross-device cloud persistence)
+  try {
+    const rtdbRestRes = await fetch('https://matnix-studios-default-rtdb.firebaseio.com/service_requests.json');
+    if (rtdbRestRes.ok) {
+      const val = await rtdbRestRes.json();
+      if (val && typeof val === 'object') {
+        Object.keys(val).forEach(key => {
+          const item = val[key];
+          if (item) {
+            const tId = item.trackingId || key;
+            const existing = requestsMap.get(tId) || {};
+            requestsMap.set(tId, {
+              id: tId,
+              ...existing,
+              ...item
+            });
+          }
+        });
+      }
+    }
+  } catch (rtdbRestErr) {
+    console.debug("Realtime DB REST fetch notice:", rtdbRestErr);
+  }
+
+  // 3. Fetch from Firestore REST API (Works cross-device on static GitHub Pages)
+  try {
+    const fsRestRes = await fetch('https://firestore.googleapis.com/v1/projects/matnix-studios/databases/(default)/documents/service_requests?key=AIzaSyBMNfCZ2LSVkCWVmJ9w2jYKG8PHaDYUyfI');
+    if (fsRestRes.ok) {
+      const fsJson = await fsRestRes.json();
+      if (fsJson.documents && Array.isArray(fsJson.documents)) {
+        fsJson.documents.forEach(docItem => {
+          const f = docItem.fields || {};
+          const tId = f.trackingId?.stringValue || docItem.name.split('/').pop();
+          const existing = requestsMap.get(tId) || {};
+          requestsMap.set(tId, {
+            id: tId,
+            ...existing,
+            trackingId: tId,
+            name: f.name?.stringValue || existing.name || '',
+            email: f.email?.stringValue || existing.email || '',
+            mobile: f.mobile?.stringValue || existing.mobile || '',
+            service: f.service?.stringValue || existing.service || 'Web Development',
+            budget: f.budget?.integerValue ? Number(f.budget.integerValue) : (existing.budget || 0),
+            description: f.description?.stringValue || existing.description || '',
+            status: f.status?.stringValue || existing.status || 'Pending',
+            createdAt: f.createdAt?.stringValue || existing.createdAt || ''
+          });
+        });
+      }
+    }
+  } catch (fsRestErr) {
+    console.debug("Firestore REST fetch notice:", fsRestErr);
+  }
+
+  // 4. Read local cached requests if any
   try {
     const localList = JSON.parse(localStorage.getItem('mayankzen_local_requests') || '[]');
     localList.forEach(r => {
@@ -172,7 +226,7 @@ async function loadRequests(silent = false) {
     console.warn("Local storage read error in admin:", e);
   }
 
-  // 3. Merge with Firestore if accessible
+  // 5. Merge with Firestore JS SDK if accessible
   try {
     const snapshot = await getDocs(collection(db, "service_requests"));
     snapshot.forEach(docSnap => {
@@ -189,7 +243,7 @@ async function loadRequests(silent = false) {
     console.debug("Firestore requests sync note:", error?.message || error);
   }
 
-  // 4. Merge with Firebase Realtime Database
+  // 6. Merge with Firebase Realtime Database JS SDK
   try {
     if (realtimeDb) {
       const rtdbSnap = await rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
@@ -408,7 +462,15 @@ function renderTable(requests) {
           }
         }
 
-        // 3. Update Firebase Realtime Database
+        // 3. Update Firebase Realtime Database (via SDK and REST for instant cross-device delivery)
+        try {
+          fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(targetKey)}.json`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus, updatedAt: Date.now() })
+          }).catch(e => console.debug('RTDB REST update notice:', e));
+        } catch (e) {}
+
         if (realtimeDb) {
           try {
             await rtdbUpdate(rtdbChild(rtdbRef(realtimeDb), `service_requests/${targetKey}`), {
@@ -638,7 +700,13 @@ window.deleteRequestRecord = async function(id) {
       }
     }
 
-    // 3. Delete from Firebase Realtime Database
+    // 3. Delete from Firebase Realtime Database (via SDK & REST)
+    try {
+      fetch(`https://matnix-studios-default-rtdb.firebaseio.com/service_requests/${encodeURIComponent(targetKey)}.json`, {
+        method: 'DELETE'
+      }).catch(e => console.debug('RTDB REST delete notice:', e));
+    } catch (e) {}
+
     if (realtimeDb) {
       try {
         await rtdbRemove(rtdbChild(rtdbRef(realtimeDb), `service_requests/${targetKey}`));
@@ -1310,18 +1378,24 @@ async function checkDatabaseHealth() {
   let firestoreOk = false;
   let rtdbOk = false;
 
-  // 1. Test Firestore
+  // 1. Test Firestore (via SDK, fallback to REST)
   try {
     await getDocs(collection(db, "service_requests"));
     firestoreOk = true;
-    if (fsBadge) {
+  } catch (fsErr) {
+    try {
+      const restTest = await fetch('https://firestore.googleapis.com/v1/projects/matnix-studios/databases/(default)/documents/service_requests?key=AIzaSyBMNfCZ2LSVkCWVmJ9w2jYKG8PHaDYUyfI');
+      if (restTest.ok) firestoreOk = true;
+    } catch (e) {}
+  }
+
+  if (fsBadge) {
+    if (firestoreOk) {
       fsBadge.style.background = 'rgba(16, 185, 129, 0.2)';
       fsBadge.style.color = '#34d399';
       fsBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
       fsBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Firestore: Connected';
-    }
-  } catch (fsErr) {
-    if (fsBadge) {
+    } else {
       fsBadge.style.background = 'rgba(239, 68, 68, 0.2)';
       fsBadge.style.color = '#fca5a5';
       fsBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
@@ -1329,20 +1403,33 @@ async function checkDatabaseHealth() {
     }
   }
 
-  // 2. Test Realtime Database
+  // 2. Test Realtime Database (via SDK, fallback to REST)
   try {
     if (realtimeDb) {
       await rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
       rtdbOk = true;
-      if (rtdbBadge) {
-        rtdbBadge.style.background = 'rgba(16, 185, 129, 0.2)';
-        rtdbBadge.style.color = '#34d399';
-        rtdbBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
-        rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Realtime DB: Connected';
-      }
     }
   } catch (rtErr) {
-    if (rtdbBadge) {
+    try {
+      const restRt = await fetch('https://matnix-studios-default-rtdb.firebaseio.com/service_requests.json');
+      if (restRt.ok) rtdbOk = true;
+    } catch (e) {}
+  }
+
+  if (!rtdbOk) {
+    try {
+      const restRt = await fetch('https://matnix-studios-default-rtdb.firebaseio.com/service_requests.json');
+      if (restRt.ok) rtdbOk = true;
+    } catch (e) {}
+  }
+
+  if (rtdbBadge) {
+    if (rtdbOk) {
+      rtdbBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+      rtdbBadge.style.color = '#34d399';
+      rtdbBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Realtime DB: Connected';
+    } else {
       rtdbBadge.style.background = 'rgba(239, 68, 68, 0.2)';
       rtdbBadge.style.color = '#fca5a5';
       rtdbBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
@@ -1364,14 +1451,71 @@ window.toggleRuleGuide = function() {
 };
 
 window.copyFirestoreRules = function() {
-  const rules = `rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n    match /{document=**} {\n      allow read, write: if true;\n    }\n  }\n}`;
+  const rules = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'admin@mayankzen.in' ||
+        request.auth.token.email == 'mayank198010@gmail.com'
+      );
+    }
+    match /service_requests/{requestId} {
+      allow read: if true;
+      allow create: if request.resource.data.trackingId is string;
+      allow update, delete: if isAdmin();
+    }
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    }
+    match /approvedAdmins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /chat_rooms/{roomId} {
+      allow read, write: if true;
+      match /messages/{messageId} {
+        allow read, write: if true;
+      }
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}`;
   navigator.clipboard.writeText(rules);
-  showToast('Firestore rules copied to clipboard!', 'success');
+  showToast('Secure Firestore rules copied to clipboard!', 'success');
 };
 
 window.copyRtdbRules = function() {
-  const rules = `{\n  "rules": {\n    ".read": true,\n    ".write": true\n  }\n}`;
+  const rules = `{
+  "rules": {
+    "service_requests": {
+      ".read": true,
+      "$requestId": {
+        ".write": "!data.exists() || (auth != null && (auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com'))",
+        ".validate": "newData.hasChildren(['trackingId', 'name', 'email'])"
+      }
+    },
+    "chats": {
+      ".read": true,
+      "$requestId": {
+        "$messageId": {
+          ".write": "!data.exists()",
+          ".validate": "newData.hasChildren(['sender', 'timestamp'])"
+        }
+      }
+    },
+    "users": {
+      "$userId": {
+        ".read": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')",
+        ".write": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')"
+      }
+    }
+  }
+}`;
   navigator.clipboard.writeText(rules);
-  showToast('Realtime DB rules copied to clipboard!', 'success');
+  showToast('Secure Realtime DB rules copied to clipboard!', 'success');
 };
 

@@ -3,5 +3,6 @@ Allow: /
 Disallow: /admin
 Disallow: /admin.html
 Disallow: /dashboard
+Disallow: /dashboard/
 
 Sitemap: https://mayankzen.in/sitemap.xml

@@ -8,7 +8,7 @@
   <title>MayankZen Studios | Where Code Meets Creativity | Web, AI & 3D Solutions</title>
   <meta name="title" content="MayankZen Studios | Where Code Meets Creativity | Web, AI & 3D Solutions">
   <meta name="description" content="MayankZen Studios is a premier digital development studio founded by Mayank. We engineer high-performance web applications, 3D interactive WebGL worlds, AI & automation systems, and custom software.">
-  <meta name="keywords" content="MayankZen Studios, Mayank Kumar, Web Development, Full Stack Developer, 3D WebGL Three.js, AI Automation, Freelance Developer India, Custom Software, Divine Imprints, Vibely Studio, Rajiv Book Binding House, Vellen Clothing, BitChat, Relm of Gods, AI Zen, Rakshak">
+  <meta name="keywords" content="MayankZen Studios, Mayank Kumar, Web Development, Full Stack Developer, 3D WebGL Three.js, AI Automation, Freelance Developer India, Custom Software, Divine Imprints, Vibely Studio, Rajiv Book Binding House, Vellen, ChatRoom, Relm of Gods, AI Zen, Rakshak">
   <meta name="author" content="Mayank Kumar">
   <meta name="publisher" content="MayankZen Studios">
   <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
@@ -53,11 +53,13 @@
   <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin>
   <link rel="dns-prefetch" href="https://www.googletagmanager.com">
 
-  <!-- Favicon & Site Icons -->
+  <!-- Favicon & Site Icons (Supports Google Search Console 48px+ standard, Modern SVG, Retina & PWA) -->
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="48x48" href="/favicon-48x48.png">
+  <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="shortcut icon" href="/favicon.ico">
+  <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
   <link rel="manifest" href="/site.webmanifest">
 
@@ -152,12 +154,7 @@
         "@id": "https://mayankzen.in/#website",
         "url": "https://mayankzen.in",
         "name": "MayankZen Studios",
-        "publisher": { "@id": "https://mayankzen.in/#organization" },
-        "potentialAction": {
-          "@type": "SearchAction",
-          "target": "https://mayankzen.in/?s={search_term_string}",
-          "query-input": "required name=search_term_string"
-        }
+        "publisher": { "@id": "https://mayankzen.in/#organization" }
       },
       {
         "@type": "ItemList",
@@ -208,10 +205,12 @@
             "@type": "ListItem",
             "position": 5,
             "item": {
-              "@type": "SoftwareApplication",
+              "@type": "WebApplication",
               "name": "Vellen",
-              "url": "https://mayankzen.in/#portfolio",
+              "url": "https://vellen.lovable.app",
               "applicationCategory": "E-Commerce",
+              "operatingSystem": "All",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
               "description": "Modern streetwear & bespoke apparel e-commerce web platform with lookbook showcase."
             }
           },
@@ -219,21 +218,25 @@
             "@type": "ListItem",
             "position": 6,
             "item": {
-              "@type": "SoftwareApplication",
-              "name": "BitChat",
-              "url": "https://mayankzen.in/#portfolio",
+              "@type": "WebApplication",
+              "name": "ChatRoom",
+              "url": "https://chatrooom.lovable.app",
               "applicationCategory": "CommunicationApplication",
-              "description": "Real-time communication suite with instant messaging, media sharing, and channel synchronization."
+              "operatingSystem": "All",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+              "description": "Real-time communication room where users can chat without any login via only a temporary username."
             }
           },
           {
             "@type": "ListItem",
             "position": 7,
             "item": {
-              "@type": "SoftwareApplication",
+              "@type": "WebApplication",
               "name": "Relm of Gods",
               "url": "https://mayankzen.in/#portfolio",
               "applicationCategory": "GameApplication",
+              "operatingSystem": "All",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
               "description": "Full 3D browser-based mythological battle arena game with custom character models and WebGL animations."
             }
           },
@@ -241,10 +244,12 @@
             "@type": "ListItem",
             "position": 8,
             "item": {
-              "@type": "SoftwareApplication",
+              "@type": "WebApplication",
               "name": "AI Zen",
               "url": "https://mayankzen.in/#portfolio",
               "applicationCategory": "UtilitiesApplication",
+              "operatingSystem": "All",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
               "description": "Virtual desktop AI assistant with natural language understanding, persona simulation, task tracking, and automated reminders."
             }
           },
@@ -252,10 +257,12 @@
             "@type": "ListItem",
             "position": 9,
             "item": {
-              "@type": "SoftwareApplication",
+              "@type": "WebApplication",
               "name": "Rakshak",
               "url": "https://mayankzen.in/#portfolio",
               "applicationCategory": "SafetyApplication",
+              "operatingSystem": "All",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
               "description": "Personal emergency safety application providing one-tap emergency SOS broadcast, live geolocation tracking, and camera recording."
             }
           }
@@ -527,17 +534,19 @@
       <h3>Vellen</h3>
       <p>Modern luxury clothing brand platform featuring curated fashion collections, seamless checkout, lookbooks, and order management.</p>
       <div class="card-actions">
-        <button class="btn primary btn-sm" onclick="openProjectModal('Vellen', 'Modern luxury clothing brand platform featuring curated fashion collections, seamless checkout, interactive lookbooks, and customer order management.', 'HTML5, CSS3, JavaScript, Firebase Firestore', '#')"><i class="fa-solid fa-eye"></i> Details</button>
+        <a href="https://vellen.lovable.app" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visit Website</a>
+        <button class="btn secondary btn-sm" onclick="openProjectModal('Vellen', 'Modern luxury clothing brand platform featuring curated fashion collections, seamless checkout, interactive lookbooks, and customer order management.', 'HTML5, CSS3, JavaScript, Firebase Firestore', 'https://vellen.lovable.app')"><i class="fa-solid fa-eye"></i> Details</button>
       </div>
     </div>
 
-    <!-- 6: BitChat -->
+    <!-- 6: ChatRoom -->
     <div class="card" data-category="web">
-      <span class="status working"><i class="fa-solid fa-comments"></i> In Development</span>
-      <h3>BitChat</h3>
-      <p>Multi-user real-time chat platform with channels, media attachments, instant notifications, and end-to-end synchronization.</p>
+      <span class="status live"><i class="fa-solid fa-bolt"></i> Live</span>
+      <h3>ChatRoom</h3>
+      <p>Real-time communication room where users can chat without any login via only a temporary username.</p>
       <div class="card-actions">
-        <button class="btn primary btn-sm" onclick="openProjectModal('BitChat', 'High-performance BitChat messaging ecosystem featuring private rooms, real-time message broadcasting, typing indicators, and file attachments.', 'Firebase Realtime DB, WebSockets, JavaScript', '#')"><i class="fa-solid fa-eye"></i> Details</button>
+        <a href="https://chatrooom.lovable.app" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visit Website</a>
+        <button class="btn secondary btn-sm" onclick="openProjectModal('ChatRoom', 'Instant real-time communication platform where users can chat seamlessly without any login or signup via only a temporary username.', 'WebSockets, Realtime Engine, Modern UI, Lovable', 'https://chatrooom.lovable.app')"><i class="fa-solid fa-eye"></i> Details</button>
       </div>
     </div>
 

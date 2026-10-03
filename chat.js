@@ -308,41 +308,66 @@ export function initChat(requestId, userId) {
     }
   }
 
-  // Poll server database for cross-device message synchronization
+  // Poll server database and RTDB REST for cross-device message synchronization
   async function syncFromServerDatabase() {
+    const currentLocal = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    const msgMap = new Map();
+
+    // Load current local first
+    currentLocal.forEach(m => {
+      const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
+      msgMap.set(key, m);
+    });
+
+    let updated = false;
+
+    // 1. Try Firebase Realtime Database direct REST (guaranteed across all devices)
+    try {
+      const rtdbRes = await fetch(`https://matnix-studios-default-rtdb.firebaseio.com/chats/${encodeURIComponent(requestId)}.json`);
+      if (rtdbRes.ok) {
+        const val = await rtdbRes.json();
+        if (val && typeof val === 'object') {
+          Object.keys(val).forEach(k => {
+            const m = val[k];
+            if (m) {
+              const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
+              if (!msgMap.has(key)) {
+                msgMap.set(key, m);
+                updated = true;
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.debug('RTDB REST chat sync notice:', e);
+    }
+
+    // 2. Try Node.js server database if available
     try {
       const res = await fetch(`/api/db/messages/${encodeURIComponent(requestId)}`);
       if (res.ok) {
         const json = await res.json();
         if (json.data && Array.isArray(json.data)) {
-          const currentLocal = JSON.parse(localStorage.getItem(storageKey) || '[]');
-          const msgMap = new Map();
-
-          // Merge local first
-          currentLocal.forEach(m => {
-            const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
-            msgMap.set(key, m);
-          });
-
-          // Merge server messages
           json.data.forEach(m => {
             const key = m.id || (m.timestamp + '_' + (m.text || m.fileId));
             if (!msgMap.has(key)) {
               msgMap.set(key, m);
+              updated = true;
             } else {
               msgMap.set(key, { ...msgMap.get(key), ...m });
             }
           });
-
-          const merged = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-          if (merged.length !== currentLocal.length || JSON.stringify(merged) !== JSON.stringify(currentLocal)) {
-            localStorage.setItem(storageKey, JSON.stringify(merged));
-            renderMessages(merged);
-          }
         }
       }
     } catch (e) {
       console.debug('Server chat sync notice:', e);
+    }
+
+    if (updated || msgMap.size !== currentLocal.length) {
+      const merged = Array.from(msgMap.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      localStorage.setItem(storageKey, JSON.stringify(merged));
+      renderMessages(merged);
     }
   }
 
@@ -379,7 +404,18 @@ export function initChat(requestId, userId) {
         });
       }
 
-      // 4. Send directly to Persistent Server Database (accessible across all devices & sessions)
+      // 4. Push to Firebase Realtime Database via direct REST for cross-device delivery
+      try {
+        const restMsg = { ...newMsg };
+        if (restMsg.dataUrl && restMsg.dataUrl.length > 20000) delete restMsg.dataUrl;
+        fetch(`https://matnix-studios-default-rtdb.firebaseio.com/chats/${encodeURIComponent(requestId)}.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(restMsg)
+        }).catch(e => console.debug('RTDB REST chat push notice:', e));
+      } catch (e) {}
+
+      // 5. Send directly to Persistent Server Database (accessible across all devices & sessions)
       fetch(`/api/db/messages/${encodeURIComponent(requestId)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -389,7 +425,7 @@ export function initChat(requestId, userId) {
       console.debug('Local storage save error:', e);
     }
 
-    // 4. Push to Firebase Realtime Database if connected
+    // 6. Push to Firebase Realtime Database SDK if connected
     if (realtimeDb) {
       try {
         const chatRef = dbRef(realtimeDb, `chats/${requestId}`);
