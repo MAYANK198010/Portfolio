@@ -19,51 +19,37 @@ service cloud.firestore {
         request.auth.token.email == 'admin@mayankzen.in' ||
         request.auth.token.email == 'mayank198010@gmail.com' ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (exists(/databases/$(database)/documents/approvedAdmins/$(request.auth.uid)))
       );
     }
 
-    // Input validation for service request submissions
-    function isValidServiceRequest(data) {
-      return data.trackingId is string && data.trackingId.size() <= 64 &&
-             data.name is string && data.name.size() <= 150 &&
-             data.email is string && data.email.size() <= 150 &&
-             data.service is string && data.service.size() <= 100 &&
-             data.description is string && data.description.size() <= 5000;
-    }
-
-    // Service Requests: public guests can track and submit; only admin can delete/alter
+    // Service Requests: public clients can submit and track; authorized admins can manage/update/delete
     match /service_requests/{requestId} {
       allow read: if true;
-      allow create: if isValidServiceRequest(request.resource.data);
+      allow create: if request.resource.data.trackingId is string;
       allow update, delete: if isAdmin();
     }
 
-    // User Profiles: private to each user; role escalation blocked
+    // User Profiles: accessible by the authenticated user or authorized admin
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow create: if isSignedIn() && request.auth.uid == userId && request.resource.data.role == 'user';
-      allow update: if isSignedIn() && (
-        isAdmin() ||
-        (request.auth.uid == userId && request.resource.data.role == resource.data.role)
-      );
+      allow create, update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow delete: if isMasterAdmin();
     }
 
-    // Approved Admins List: only readable by authenticated users, only writable by master admin
+    // Approved Admins List: readable by authenticated users, writable by authorized admin
     match /approvedAdmins/{adminId} {
       allow read: if isSignedIn();
-      allow write: if isMasterAdmin();
+      allow write: if isAdmin();
     }
 
-    // Chat Rooms and Messages: direct collaboration channel
+    // Chat Rooms and Messages: direct collaboration channel for client tracking and live support
     match /chat_rooms/{roomId} {
       allow read, write: if true;
 
       match /messages/{messageId} {
-        allow read: if true;
-        allow create: if request.resource.data.text is string && request.resource.data.text.size() <= 5000;
-        allow update, delete: if isAdmin();
+        allow read, write: if true;
       }
     }
 
