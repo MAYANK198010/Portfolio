@@ -8,6 +8,7 @@
         "express": "^4.21.2",
         "nodemailer": "^10.0.14",
         "sharp": "^0.35.3",
+        "three": "^0.186.1",
         "to-ico": "^1.1.5",
       },
     },
@@ -354,6 +355,8 @@
     "stream-to": ["stream-to@0.2.2", "", {}, "sha512-Kg1BSDTwgGiVMtTCJNlo7kk/xzL33ZuZveEBRt6rXw+f1WLK/8kmz2NVCT/Qnv0JkV85JOHcLhD82mnXsR3kPw=="],
 
     "stream-to-buffer": ["stream-to-buffer@0.1.0", "", { "dependencies": { "stream-to": "~0.2.0" } }, "sha512-Da4WoKaZyu3nf+bIdIifh7IPkFjARBnBK+pYqn0EUJqksjV9afojjaCCHUemH30Jmu7T2qcKvlZm2ykN38uzaw=="],
+
+    "three": ["three@0.186.1", "", {}, "sha512-blFeqb49wRCSGUGj7gtpfnSGHy2lwDk94RhUmS1c/hTby70kvChbWpkJ4Pm1390LqzzvTmzgXKHPEafJwCb8jA=="],
 
     "tinycolor2": ["tinycolor2@1.6.0", "", {}, "sha512-XPaBkWQJdsf3pLKJV9p4qN/S+fm2Oj8AIPo1BTUhg5oxkvm9+SVEGFdhyOz7tTdUTfvxMiAs4sp6/eZO2Ew+pw=="],
 
