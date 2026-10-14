@@ -11,6 +11,7 @@ const firebaseConfig = {
   appId: "1:392073440321:web:82c80696c69a9015ddaac0",
   apiKey: "AIzaSyDP3ue8Rdw4GvX28QVLQggI_asvQ-Ilw2A",
   authDomain: "gen-lang-client-0252012026.firebaseapp.com",
+  databaseURL: "https://gen-lang-client-0252012026-default-rtdb.firebaseio.com",
   firestoreDatabaseId: "ai-studio-portfolio-d4f5cb96-6d77-4ac8-a099-283e9f812285",
   storageBucket: "gen-lang-client-0252012026.firebasestorage.app",
   messagingSenderId: "392073440321",
@@ -38,9 +39,9 @@ export const storage = storageInstance;
 
 let realtimeDbInstance = null;
 try {
-  if (firebaseConfig.databaseURL) {
-    realtimeDbInstance = getDatabase(app);
-  }
+  const customRtdbUrl = typeof window !== 'undefined' ? localStorage.getItem('mayankzen_custom_rtdb_url') : null;
+  const activeRtdbUrl = customRtdbUrl || firebaseConfig.databaseURL || "https://gen-lang-client-0252012026-default-rtdb.firebaseio.com";
+  realtimeDbInstance = getDatabase(app, activeRtdbUrl);
 } catch (e) {
   console.warn("Realtime Database fallback:", e?.message);
 }

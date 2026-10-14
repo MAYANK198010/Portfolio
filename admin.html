@@ -126,6 +126,9 @@
         <span id="rtdbBadge" class="status" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); margin: 0; font-size: 0.78rem;">
           <i class="fa-solid fa-spinner fa-spin"></i> Realtime DB: Checking...
         </span>
+        <span id="serverDbBadge" class="status" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); margin: 0; font-size: 0.78rem;">
+          <i class="fa-solid fa-circle-check"></i> Server DB: Active
+        </span>
         <button id="toggleRuleGuideBtn" class="btn secondary btn-sm" onclick="toggleRuleGuide()" style="padding: 0.25rem 0.65rem; font-size: 0.78rem;">
           <i class="fa-solid fa-shield-halved"></i> Setup Guide
         </button>
@@ -136,7 +139,7 @@
     <div id="ruleGuidePanel" style="display: none; margin-top: 1.25rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.25rem;">
       <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 10px; padding: 1rem; margin-bottom: 1rem; color: #fbbf24; font-size: 0.88rem; line-height: 1.5;">
         <i class="fa-solid fa-circle-exclamation"></i> <strong>Cloud Persistence Architecture:</strong><br>
-        Requests are persistently recorded to the backend database and synced to Firebase Firestore (project: <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fff;">gen-lang-client-0252012026</code>). Ensure rules permit client submissions and authorized admin reads.
+        Requests are persistently recorded to the backend database and synced to Firebase Firestore (project: <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fff;">gen-lang-client-0252012026</code>, database: <code style="background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: #fff;">ai-studio-portfolio-d4f5cb96-6d77-4ac8-a099-283e9f812285</code>) and optional Realtime Database. Ensure rules permit client submissions and authorized admin reads.
       </div>
 
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
@@ -184,33 +187,42 @@ service cloud.firestore {
 
         <div style="background: rgba(0,0,0,0.4); border: 1px solid rgba(16,185,129,0.3); border-radius: 10px; padding: 1rem;">
           <h4 style="color: var(--accent-green); font-size: 0.95rem; margin-bottom: 0.5rem;"><i class="fa-solid fa-bolt"></i> 2. Publish Secure Realtime DB Rules</h4>
-          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Permits verified request creations while guarding against overwrites:</p>
+          <p style="color: var(--text-secondary); font-size: 0.82rem; margin-bottom: 0.75rem;">Permits verified request creations while guarding against overwrites (uses Firebase RTDB <code>==</code> operator):</p>
           <pre style="background: rgba(15,23,42,0.9); padding: 0.75rem; border-radius: 6px; font-size: 0.78rem; color: #34d399; overflow-x: auto; margin-bottom: 0.75rem;">{
   "rules": {
     "service_requests": {
       ".read": true,
       "$requestId": {
-        ".write": "!data.exists() || (auth != null && (auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com'))",
-        ".validate": "newData.hasChildren(['trackingId', 'name', 'email'])"
+        ".write": "!data.exists() || (auth != null && (auth.token.email == 'admin@mayankzen.in' || auth.token.email == 'mayank198010@gmail.com'))",
+        ".validate": "newData.hasChildren(['trackingId', 'name'])"
       }
     },
     "chats": {
       ".read": true,
       "$requestId": {
+        ".read": true,
+        ".write": true,
         "$messageId": {
-          ".write": "!data.exists()",
-          ".validate": "newData.hasChildren(['sender', 'timestamp'])"
+          ".read": true,
+          ".write": true
         }
       }
     },
     "users": {
       "$userId": {
-        ".read": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')",
-        ".write": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')"
+        ".read": "auth != null && (auth.uid == $userId || auth.token.email == 'admin@mayankzen.in' || auth.token.email == 'mayank198010@gmail.com')",
+        ".write": "auth != null && (auth.uid == $userId || auth.token.email == 'admin@mayankzen.in' || auth.token.email == 'mayank198010@gmail.com')"
       }
     }
   }
 }</pre>
+          <div style="margin-bottom: 0.75rem;">
+            <label style="color: var(--text-secondary); font-size: 0.78rem; display: block; margin-bottom: 0.35rem;">Realtime Database URL (from Firebase Console):</label>
+            <div style="display: flex; gap: 0.5rem;">
+              <input type="text" id="rtdbUrlInput" placeholder="https://gen-lang-client-0252012026-default-rtdb.firebaseio.com" style="flex: 1; padding: 0.4rem 0.6rem; font-size: 0.78rem; background: rgba(15,23,42,0.8); border: 1px solid rgba(16,185,129,0.4); border-radius: 6px; color: #fff;">
+              <button class="btn secondary btn-sm" onclick="saveRtdbUrl()"><i class="fa-solid fa-save"></i> Save</button>
+            </div>
+          </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn secondary btn-sm" onclick="copyRtdbRules()"><i class="fa-solid fa-copy"></i> Copy Rules</button>
             <a href="https://console.firebase.google.com/project/gen-lang-client-0252012026/database" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open RTDB Console</a>

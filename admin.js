@@ -1439,10 +1439,18 @@ window.refreshData = function() {
 async function checkDatabaseHealth() {
   const fsBadge = document.getElementById('firestoreBadge');
   const rtdbBadge = document.getElementById('rtdbBadge');
+  const srvBadge = document.getElementById('serverDbBadge');
   const guidePanel = document.getElementById('ruleGuidePanel');
+  const rtdbInput = document.getElementById('rtdbUrlInput');
+
+  if (rtdbInput && !rtdbInput.value) {
+    const savedUrl = localStorage.getItem('mayankzen_custom_rtdb_url');
+    rtdbInput.value = savedUrl || "https://gen-lang-client-0252012026-default-rtdb.firebaseio.com";
+  }
 
   let firestoreOk = false;
   let rtdbOk = false;
+  let serverDbOk = false;
 
   // 1. Test Firestore via SDK
   try {
@@ -1466,18 +1474,16 @@ async function checkDatabaseHealth() {
     }
   }
 
-  // 2. Test Realtime Database / Server Persistence
-  try {
-    if (realtimeDb) {
-      await rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
+  // 2. Test Realtime Database (with non-blocking 3.5s timeout)
+  if (realtimeDb) {
+    try {
+      const rtdbPromise = rtdbGet(rtdbChild(rtdbRef(realtimeDb), "service_requests"));
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('RTDB connection timeout')), 3500));
+      await Promise.race([rtdbPromise, timeoutPromise]);
       rtdbOk = true;
-    } else {
-      // If Realtime DB is not configured, check persistent server DB
-      const srvCheck = await fetch('/api/db/requests');
-      if (srvCheck.ok) rtdbOk = true;
+    } catch (rtErr) {
+      console.debug("Realtime DB check notice:", rtErr?.message || rtErr);
     }
-  } catch (rtErr) {
-    console.debug("Secondary DB check notice:", rtErr);
   }
 
   if (rtdbBadge) {
@@ -1485,20 +1491,55 @@ async function checkDatabaseHealth() {
       rtdbBadge.style.background = 'rgba(16, 185, 129, 0.2)';
       rtdbBadge.style.color = '#34d399';
       rtdbBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
-      rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Persistence: Active';
+      rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Realtime DB: Connected';
     } else {
-      rtdbBadge.style.background = 'rgba(239, 68, 68, 0.2)';
-      rtdbBadge.style.color = '#fca5a5';
-      rtdbBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
-      rtdbBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Persistence: Standby';
+      rtdbBadge.style.background = 'rgba(245, 158, 11, 0.2)';
+      rtdbBadge.style.color = '#fbbf24';
+      rtdbBadge.style.border = '1px solid rgba(245, 158, 11, 0.4)';
+      rtdbBadge.innerHTML = '<i class="fa-solid fa-circle-info"></i> Realtime DB: Standby (Optional)';
+      rtdbBadge.title = 'Realtime Database is optional; Firestore and Server DB provide full real-time and persistent storage.';
     }
   }
 
-  // If rules are blocked, show the guide panel automatically
-  if ((!firestoreOk || !rtdbOk) && guidePanel && guidePanel.style.display !== 'block') {
+  // 3. Test Persistent Server Database
+  try {
+    const srvCheck = await fetch('/api/db/requests');
+    if (srvCheck.ok) serverDbOk = true;
+  } catch (srvErr) {
+    console.debug("Server DB check notice:", srvErr);
+  }
+
+  if (srvBadge) {
+    if (serverDbOk) {
+      srvBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+      srvBadge.style.color = '#34d399';
+      srvBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      srvBadge.innerHTML = '<i class="fa-solid fa-circle-check"></i> Server DB: Active';
+    } else {
+      srvBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+      srvBadge.style.color = '#fca5a5';
+      srvBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      srvBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Server DB: Offline';
+    }
+  }
+
+  // Show the guide panel automatically only if primary Firestore connection needs attention
+  if (!firestoreOk && guidePanel && guidePanel.style.display !== 'block') {
     guidePanel.style.display = 'block';
   }
 }
+
+window.saveRtdbUrl = function() {
+  const input = document.getElementById('rtdbUrlInput');
+  if (input && input.value.trim()) {
+    const url = input.value.trim();
+    localStorage.setItem('mayankzen_custom_rtdb_url', url);
+    showToast('Realtime Database URL saved! Reconnecting...', 'info');
+    setTimeout(() => {
+      window.location.reload();
+    }, 600);
+  }
+};
 
 window.toggleRuleGuide = function() {
   const panel = document.getElementById('ruleGuidePanel');
@@ -1551,23 +1592,25 @@ window.copyRtdbRules = function() {
     "service_requests": {
       ".read": true,
       "$requestId": {
-        ".write": "!data.exists() || (auth != null && (auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com'))",
-        ".validate": "newData.hasChildren(['trackingId', 'name', 'email'])"
+        ".write": "!data.exists() || (auth != null && (auth.token.email == 'admin@mayankzen.in' || auth.token.email == 'mayank198010@gmail.com'))",
+        ".validate": "newData.hasChildren(['trackingId', 'name'])"
       }
     },
     "chats": {
       ".read": true,
       "$requestId": {
+        ".read": true,
+        ".write": true,
         "$messageId": {
-          ".write": "!data.exists()",
-          ".validate": "newData.hasChildren(['sender', 'timestamp'])"
+          ".read": true,
+          ".write": true
         }
       }
     },
     "users": {
       "$userId": {
-        ".read": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')",
-        ".write": "auth != null && (auth.uid === $userId || auth.token.email === 'admin@mayankzen.in' || auth.token.email === 'mayank198010@gmail.com')"
+        ".read": "auth != null && (auth.uid == $userId || auth.token.email == 'admin@mayankzen.in' || auth.token.email == 'mayank198010@gmail.com')",
+        ".write": "auth != null && (auth.uid == $userId || auth.token.email == 'admin@mayankzen.in' || auth.token.email == 'mayank198010@gmail.com')"
       }
     }
   }
