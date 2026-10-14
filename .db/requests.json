@@ -24,33 +24,5 @@
     "status": "Pending",
     "createdAt": "2026-10-03T17:45:50.402Z",
     "updatedAt": "2026-10-03T17:45:51.460Z"
-  },
-  "MZ-VERIFY-4638": {
-    "trackingId": "MZ-VERIFY-4638",
-    "name": "Theme Validation Client",
-    "email": "client@example.com",
-    "mobile": "+91 99887 76655",
-    "service": "Full Stack Web Platform",
-    "budget": 35000,
-    "timeline": "3 Weeks",
-    "description": "Validating end-to-end theme toggle and automated SMTP trigger.",
-    "attachments": [],
-    "status": "Pending",
-    "createdAt": "2026-10-14T13:47:26.293Z",
-    "updatedAt": "2026-10-14T13:47:26.293Z"
-  },
-  "MZ-LIVE-5060": {
-    "trackingId": "MZ-LIVE-5060",
-    "name": "Rohit Verma",
-    "email": "rohit@example.com",
-    "mobile": "+91 98765 43210",
-    "service": "AI & Automation Pipeline",
-    "budget": 50000,
-    "timeline": "1 Month",
-    "description": "Looking to automate workflow pipelines with custom LLM agent.",
-    "attachments": [],
-    "status": "Pending",
-    "createdAt": "2026-10-14T13:48:18.653Z",
-    "updatedAt": "2026-10-14T13:48:18.653Z"
   }
 }

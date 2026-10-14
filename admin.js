@@ -275,9 +275,6 @@ function renderMetricsAndCharts() {
 
   // Render Status Chart if Chart.js is loaded
   if (typeof Chart !== 'undefined') {
-    const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
-    const chartTextColor = isLightMode ? '#475569' : '#a1a8c0';
-
     const statusCtx = document.getElementById('statusChart')?.getContext('2d');
     if (statusCtx) {
       if (statusChartInstance) statusChartInstance.destroy();
@@ -295,7 +292,7 @@ function renderMetricsAndCharts() {
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { position: 'bottom', labels: { color: chartTextColor } }
+            legend: { position: 'bottom', labels: { color: '#a1a8c0' } }
           }
         }
       });
@@ -320,8 +317,8 @@ function renderMetricsAndCharts() {
           responsive: true,
           maintainAspectRatio: false,
           scales: {
-            y: { ticks: { color: chartTextColor, stepSize: 1 } },
-            x: { ticks: { color: chartTextColor } }
+            y: { ticks: { color: '#a1a8c0', stepSize: 1 } },
+            x: { ticks: { color: '#a1a8c0' } }
           },
           plugins: {
             legend: { display: false }
@@ -331,13 +328,6 @@ function renderMetricsAndCharts() {
     }
   }
 }
-
-// Re-render charts on theme toggle
-window.addEventListener('themeChanged', () => {
-  if (typeof requestsData !== 'undefined' && requestsData && requestsData.length > 0) {
-    renderStats(requestsData);
-  }
-});
 
 // Render Table
 function renderTable(requests) {

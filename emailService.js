@@ -178,10 +178,7 @@ export async function sendNewProjectAdminAlertEmail(request) {
   }
 
   const cfg = getSmtpConfig();
-  const primaryAlertRecipient = 'account@mayankzen.in';
-  const recipient = cfg.notificationEmail && cfg.notificationEmail !== primaryAlertRecipient
-    ? `${primaryAlertRecipient}, ${cfg.notificationEmail}`
-    : primaryAlertRecipient;
+  const recipient = cfg.notificationEmail || 'account@mayankzen.in';
   const trackingId = request.trackingId || ('MS-' + Math.floor(1000 + Math.random() * 9000));
   const serviceName = request.service || 'Custom Development Service';
   const clientName = request.name || 'Anonymous Client';
