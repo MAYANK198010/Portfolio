@@ -11,8 +11,8 @@ function init3DCity() {
   if (!canvas || typeof THREE === 'undefined' || !THREE.WebGLRenderer) return;
 
   try {
-    scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x0a0e17, 0.008);
+    const isLightInitial = document.documentElement.getAttribute('data-theme') === 'light';
+    scene.fog = new THREE.FogExp2(isLightInitial ? 0xf8fafc : 0x0a0e17, 0.008);
 
     camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 25, 60);
@@ -27,8 +27,20 @@ function init3DCity() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 
   // Lighting
-  const ambientLight = new THREE.AmbientLight(0x1a2035, 1.5);
+  const ambientLight = new THREE.AmbientLight(isLightInitial ? 0xffffff : 0x1a2035, isLightInitial ? 2.4 : 1.5);
   scene.add(ambientLight);
+
+  // Dynamic Theme Adaptor for 3D City
+  window.addEventListener('themeChanged', (e) => {
+    const isLight = e.detail?.isLight;
+    if (scene && scene.fog) {
+      scene.fog.color.setHex(isLight ? 0xf8fafc : 0x0a0e17);
+    }
+    if (ambientLight) {
+      ambientLight.color.setHex(isLight ? 0xffffff : 0x1a2035);
+      ambientLight.intensity = isLight ? 2.4 : 1.5;
+    }
+  });
 
   const purpleLight = new THREE.PointLight(0x8b5cf6, 3, 160);
   purpleLight.position.set(-30, 40, 30);

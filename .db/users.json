@@ -49,5 +49,13 @@
     "role": "user",
     "createdAt": "2026-10-14T13:32:55.494Z",
     "lastActive": "2026-10-14T13:32:55.494Z"
+  },
+  "rohit@example.com": {
+    "id": "usr_1791985698654_lokm3f",
+    "email": "rohit@example.com",
+    "name": "Rohit Verma",
+    "role": "user",
+    "createdAt": "2026-10-14T13:48:18.653Z",
+    "lastActive": "2026-10-14T13:48:18.654Z"
   }
 }
