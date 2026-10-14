@@ -1082,7 +1082,7 @@ window.loadEmailLogs = async function() {
     const logs = json.data || [];
 
     if (logs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No email dispatches recorded yet.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No email dispatches recorded yet.</td></tr>';
       return;
     }
 
@@ -1094,6 +1094,10 @@ window.loadEmailLogs = async function() {
             ? `<span class="status pending" style="background: rgba(234, 179, 8, 0.2); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.4);"><i class="fa-solid fa-triangle-exclamation"></i> Unblock Needed</span>`
             : `<span class="status in-review" style="background: rgba(148, 163, 184, 0.2); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.4);"><i class="fa-solid fa-clock"></i> Queued</span>`);
 
+      const typeBadge = (log.type === 'admin_alert' || log.recipient === 'account@mayankzen.in')
+        ? `<span class="status" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4);"><i class="fa-solid fa-bell"></i> Admin Alert</span>`
+        : `<span class="status" style="background: rgba(168, 85, 247, 0.2); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.4);"><i class="fa-solid fa-envelope"></i> Client Confirm</span>`;
+
       const errInfo = log.error 
         ? `<span style="color: #f87171; font-size: 0.8rem; word-break: break-all;">${escapeHtml(log.error)}</span>`
         : `<span style="color: #34d399; font-size: 0.8rem;"><i class="fa-solid fa-circle-check"></i> Accepted by SMTP</span>`;
@@ -1101,6 +1105,7 @@ window.loadEmailLogs = async function() {
       return `
         <tr>
           <td style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap;">${timeStr}</td>
+          <td>${typeBadge}</td>
           <td><strong>${escapeHtml(log.recipient || 'N/A')}</strong></td>
           <td><span style="font-family: monospace; color: #00f0ff;">${escapeHtml(log.trackingId || 'N/A')}</span></td>
           <td style="font-size: 0.85rem;">${escapeHtml(log.service || 'N/A')}</td>
@@ -1115,7 +1120,7 @@ window.loadEmailLogs = async function() {
       `;
     }).join('');
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: #f87171; padding: 2rem;">Error: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #f87171; padding: 2rem;">Error: ${err.message}</td></tr>`;
   }
 };
 
@@ -1123,19 +1128,14 @@ window.triggerTestEmail = async function() {
   const input = document.getElementById('testEmailRecipient');
   const btn = document.getElementById('sendTestEmailBtn');
   const statusDiv = document.getElementById('testEmailStatus');
-  const email = (input?.value || '').trim();
-
-  if (!email) {
-    showToast('Please enter an email address to send test email', 'error');
-    return;
-  }
+  const email = (input?.value || 'account@mayankzen.in').trim();
 
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending Alert...';
   if (statusDiv) {
     statusDiv.style.display = 'block';
     statusDiv.style.color = 'var(--text-secondary)';
-    statusDiv.innerHTML = 'Connecting to Zoho SMTP server...';
+    statusDiv.innerHTML = 'Connecting to SMTP server (smtp.zoho.in)...';
   }
 
   try {
@@ -1146,35 +1146,36 @@ window.triggerTestEmail = async function() {
     });
     const data = await res.json();
 
-    if (data.sentLive) {
-      showToast(`Test email successfully delivered to ${email}!`, 'success');
+    const adminOk = data.adminAlert?.sentLive || data.sentLive;
+    if (adminOk) {
+      showToast(`Test notification successfully delivered to account@mayankzen.in!`, 'success');
       if (statusDiv) {
         statusDiv.style.color = '#34d399';
-        statusDiv.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Success:</strong> Live confirmation email dispatched to <strong>${email}</strong> from <strong>account@mayankzen.in</strong>! Check inbox/spam.`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Success:</strong> Live new-project alert dispatched to <strong>account@mayankzen.in</strong> via SMTP! Check your inbox.`;
       }
-    } else if (data.unblockRequired) {
-      showToast('Zoho outbound unblock required for external email', 'warning');
+    } else if (data.unblockRequired || data.adminAlert?.unblockRequired) {
+      showToast('Zoho outbound verification notice', 'warning');
       if (statusDiv) {
         statusDiv.style.color = '#facc15';
-        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Zoho Unblock Required:</strong> Zoho requires a one-time verification for external domains. <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock outbound emails at mail.zoho.in/UnblockMe</a>.`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Zoho Unblock Required:</strong> <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock outbound emails at mail.zoho.in/UnblockMe</a>.`;
       }
     } else {
-      showToast(`Email status: ${data.status || 'Queued'}`, 'info');
+      showToast(`Email trigger recorded (${data.status || 'Queued'})`, 'info');
       if (statusDiv) {
         statusDiv.style.color = '#cbd5e1';
-        statusDiv.innerHTML = `<i class="fa-solid fa-info-circle"></i> Result: ${data.error || 'Dispatched and logged in database.'}`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-info-circle"></i> Result: ${data.adminAlert?.error || data.error || 'Dispatched and recorded in audit log.'}`;
       }
     }
     loadEmailLogs();
   } catch (err) {
-    showToast('Failed to dispatch test email: ' + err.message, 'error');
+    showToast('Failed to dispatch test alert: ' + err.message, 'error');
     if (statusDiv) {
       statusDiv.style.color = '#f87171';
       statusDiv.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> Failed: ${err.message}`;
     }
   } finally {
     btn.disabled = false;
-    btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Test Email';
+    btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send Test Alert';
   }
 };
 

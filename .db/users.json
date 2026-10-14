@@ -41,5 +41,13 @@
     "role": "user",
     "createdAt": "2026-10-03T17:34:46.862Z",
     "lastActive": "2026-10-03T17:34:46.862Z"
+  },
+  "rohan.patel@example.com": {
+    "id": "usr_1791984775494_pjj84z",
+    "email": "rohan.patel@example.com",
+    "name": "Rohan Patel",
+    "role": "user",
+    "createdAt": "2026-10-14T13:32:55.494Z",
+    "lastActive": "2026-10-14T13:32:55.494Z"
   }
 }

@@ -442,7 +442,7 @@ service cloud.firestore {
             <i class="fa-solid fa-server"></i> SMTP Mail Server Status
           </h3>
           <p style="color: var(--text-secondary); margin: 0; font-size: 0.9rem;">
-            Host: <strong style="color: white;">smtp.zoho.in:465</strong> (SSL) &bull; Official Sender: <strong style="color: #00f0ff;">account@mayankzen.in</strong>
+            Host: <strong style="color: white;">smtp.zoho.in:465</strong> (SSL) &bull; Sender: <strong style="color: #00f0ff;">account@mayankzen.in</strong> &bull; Auto-Notify Alert: <strong style="color: #34d399;">account@mayankzen.in</strong>
           </p>
         </div>
         <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -457,20 +457,18 @@ service cloud.firestore {
       
       <!-- Notice on Zoho external email unblock -->
       <div style="margin-top: 1rem; padding: 0.85rem 1rem; background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); border-radius: 8px; font-size: 0.85rem; color: #fef08a; line-height: 1.5;">
-        <i class="fa-solid fa-circle-info"></i> <strong>Note on Zoho Outbound Deliverability:</strong>
-        When automated emails are sent to external accounts (like Gmail), Zoho Mail may trigger a temporary safety hold (<em>"Unusual sending activity detected"</em>).
-        To enable external delivery, log in to <strong>accounts@mayankzen.in</strong> and click the 
-        <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; font-weight: 700; text-decoration: underline;">Zoho Unblock Page</a>.
+        <i class="fa-solid fa-circle-info"></i> <strong>Automated Email Dispatch Active:</strong>
+        Every new project request submitted automatically triggers an alert email to <strong>account@mayankzen.in</strong> with full project specifications and attachments. Confirmation emails are also dispatched to clients.
       </div>
     </div>
 
     <!-- Quick Dispatch Test Form -->
     <div class="card" style="margin-bottom: 1.5rem; text-align: left;">
-      <h4 style="color: var(--accent-green); margin-bottom: 0.75rem;"><i class="fa-solid fa-paper-plane"></i> Send Test Confirmation Email</h4>
+      <h4 style="color: var(--accent-green); margin-bottom: 0.75rem;"><i class="fa-solid fa-paper-plane"></i> Send Test Notification Email</h4>
       <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
-        <input type="email" id="testEmailRecipient" placeholder="Enter recipient email (e.g. client@example.com)" style="flex: 1; min-width: 250px; padding: 0.75rem 1rem; background: rgba(0,0,0,0.5); border: 1px solid var(--primary-purple); border-radius: 8px; color: white;">
+        <input type="email" id="testEmailRecipient" placeholder="Recipient (default: account@mayankzen.in)" value="account@mayankzen.in" style="flex: 1; min-width: 250px; padding: 0.75rem 1rem; background: rgba(0,0,0,0.5); border: 1px solid var(--primary-purple); border-radius: 8px; color: white;">
         <button id="sendTestEmailBtn" type="button" class="btn primary btn-sm" onclick="triggerTestEmail()">
-          <i class="fa-solid fa-paper-plane"></i> Send Test Email
+          <i class="fa-solid fa-paper-plane"></i> Send Test Alert
         </button>
       </div>
       <div id="testEmailStatus" style="margin-top: 0.75rem; display: none; font-size: 0.85rem;"></div>
@@ -482,6 +480,7 @@ service cloud.firestore {
         <thead>
           <tr>
             <th>Time</th>
+            <th>Type</th>
             <th>Recipient</th>
             <th>Tracking ID</th>
             <th>Service</th>
@@ -492,7 +491,7 @@ service cloud.firestore {
         </thead>
         <tbody id="emailLogsTable">
           <tr>
-            <td colspan="7" style="text-align: center; padding: 2rem;">Loading email dispatch records...</td>
+            <td colspan="8" style="text-align: center; padding: 2rem;">Loading email dispatch records...</td>
           </tr>
         </tbody>
       </table>

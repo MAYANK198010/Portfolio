@@ -3,7 +3,17 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { ServerDB } from './server-db.js';
-import { sendServiceRequestConfirmationEmail, getEmailLogs } from './emailService.js';
+import { 
+  sendAllProjectSubmissionEmails, 
+  sendNewProjectAdminAlertEmail, 
+  sendServiceRequestConfirmationEmail, 
+  getEmailLogs, 
+  loadEnvFile,
+  getSmtpConfig 
+} from './emailService.js';
+
+// Ensure .env is loaded on initialization
+loadEnvFile();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -76,15 +86,17 @@ app.post('/api/db/requests', async (req, res) => {
   try {
     const saved = ServerDB.saveRequest(req.body);
     
-    // Automatically trigger confirmation email to the client from account@mayankzen.in
+    // Automatically trigger an email to account@mayankzen.in (and confirmation to client if email provided)
     let emailResult = null;
-    if (saved && saved.email) {
-      try {
-        emailResult = await sendServiceRequestConfirmationEmail(saved);
-      } catch (err) {
-        console.error('Failed to trigger confirmation email:', err);
-        emailResult = { success: false, error: err.message };
-      }
+    try {
+      emailResult = await sendAllProjectSubmissionEmails(saved);
+      console.log(`[Server] Project request [${saved.trackingId}] recorded. Email trigger result:`, {
+        adminAlertSent: emailResult?.adminAlert?.sentLive,
+        clientConfirmationSent: emailResult?.clientConfirmation?.sentLive
+      });
+    } catch (err) {
+      console.error('[Server] Failed to trigger project request emails:', err);
+      emailResult = { success: false, error: err.message };
     }
 
     res.json({ success: true, data: saved, emailResult });
@@ -94,14 +106,29 @@ app.post('/api/db/requests', async (req, res) => {
   }
 });
 
-// Dedicated endpoint to send request confirmation email from account@mayankzen.in
+// Dedicated endpoint to explicitly notify account@mayankzen.in of a new project request
+app.post('/api/notify-new-request', async (req, res) => {
+  try {
+    const requestData = req.body;
+    if (!requestData) {
+      return res.status(400).json({ success: false, message: 'Request payload is required.' });
+    }
+    const result = await sendNewProjectAdminAlertEmail(requestData);
+    res.json(result);
+  } catch (err) {
+    console.error('Admin notification API error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Endpoint to send request confirmation email and admin alert
 app.post('/api/send-confirmation-email', async (req, res) => {
   try {
     const requestData = req.body;
-    if (!requestData || !requestData.email) {
-      return res.status(400).json({ success: false, message: 'Recipient email is required.' });
+    if (!requestData) {
+      return res.status(400).json({ success: false, message: 'Request data is required.' });
     }
-    const result = await sendServiceRequestConfirmationEmail(requestData);
+    const result = await sendAllProjectSubmissionEmails(requestData);
     res.json(result);
   } catch (err) {
     console.error('Confirmation email API error:', err);
@@ -119,23 +146,47 @@ app.get('/api/email/logs', (req, res) => {
   }
 });
 
+// SMTP Configuration Status Endpoint (sanitized, no credentials revealed)
+app.get('/api/email/config', (req, res) => {
+  try {
+    const cfg = getSmtpConfig();
+    res.json({
+      success: true,
+      configured: Boolean(cfg.user && cfg.pass),
+      host: cfg.host,
+      port: cfg.port,
+      user: cfg.user,
+      notificationEmail: cfg.notificationEmail,
+      hasPassword: Boolean(cfg.pass)
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Trigger a Test Email Endpoint
 app.post('/api/email/test', async (req, res) => {
   try {
-    const { recipient } = req.body;
-    if (!recipient) {
-      return res.status(400).json({ success: false, message: 'Recipient email address is required.' });
-    }
+    const { recipient, type } = req.body;
     const testRequest = {
       trackingId: 'TEST-' + Math.floor(1000 + Math.random() * 9000),
-      name: 'Test Client',
-      email: recipient.trim(),
+      name: 'Mayank Test Client',
+      email: (recipient || 'test@example.com').trim(),
+      mobile: '+91 98765 43210',
       service: 'Custom Engineering & Web Architecture',
-      budget: 1500,
+      budget: 2500,
       status: 'Pending',
-      description: 'System connectivity verification from MayankZen Studios.'
+      description: 'System connectivity verification from MayankZen Studios backend.',
+      attachments: [{ name: 'architecture-brief.pdf', size: 104200 }]
     };
-    const result = await sendServiceRequestConfirmationEmail(testRequest);
+
+    if (type === 'client') {
+      const result = await sendServiceRequestConfirmationEmail(testRequest);
+      return res.json(result);
+    }
+
+    // Default: test both admin alert to account@mayankzen.in and optional client test
+    const result = await sendAllProjectSubmissionEmails(testRequest);
     res.json(result);
   } catch (err) {
     console.error('Test email API error:', err);
@@ -143,14 +194,14 @@ app.post('/api/email/test', async (req, res) => {
   }
 });
 
-// Resend Confirmation Email by Tracking ID
+// Resend Confirmation & Notification Email by Tracking ID
 app.post('/api/email/resend/:trackingId', async (req, res) => {
   try {
     const request = ServerDB.getRequestById(req.params.trackingId);
     if (!request) {
       return res.status(404).json({ success: false, message: 'Request not found' });
     }
-    const result = await sendServiceRequestConfirmationEmail(request);
+    const result = await sendAllProjectSubmissionEmails(request);
     res.json(result);
   } catch (err) {
     console.error('Resend email API error:', err);
