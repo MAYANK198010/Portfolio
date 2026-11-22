@@ -24,5 +24,118 @@
     "status": "Pending",
     "createdAt": "2026-10-03T17:45:50.402Z",
     "updatedAt": "2026-10-03T17:45:51.460Z"
+  },
+  "MS-99887": {
+    "trackingId": "MS-99887",
+    "name": "Mayank Verified User",
+    "email": "mayank198010@gmail.com",
+    "mobile": "+91 9968198010",
+    "service": "AI & Automation",
+    "budget": 25000,
+    "description": "Building full-stack AI automation workflow with custom integrations.",
+    "status": "Working",
+    "attachments": [],
+    "createdAt": "2026-10-29T05:46:04.775Z",
+    "updatedAt": "2026-10-29T05:46:22.388Z",
+    "notifyClient": true,
+    "statusNote": "Sprint 1 started: Architecture review and schema setup completed."
+  },
+  "MS-35708": {
+    "attachments": [],
+    "createdAt": "2026-10-21T03:25:39.032Z",
+    "description": "nknd,vvn",
+    "status": "Pending",
+    "name": "Mayank",
+    "timestamp": {
+      "type": "firestore/timestamp/1.0",
+      "seconds": 1792553139,
+      "nanoseconds": 79000000
+    },
+    "email": "mayank198010@gmail.com",
+    "budget": 98972,
+    "service": "AI & Automation",
+    "mobile": "+919968198010",
+    "trackingId": "MS-35708",
+    "updatedAt": "2026-11-11T04:24:31.301Z"
+  },
+  "MS-50312": {
+    "createdAt": "2026-10-05T07:29:38.927Z",
+    "name": "Kill Sham",
+    "mobile": "09968198010",
+    "budget": 850609,
+    "email": "killsham908@gmail.com",
+    "description": "F jh",
+    "attachments": [],
+    "timestamp": {
+      "type": "firestore/timestamp/1.0",
+      "seconds": 1791185379,
+      "nanoseconds": 130000000
+    },
+    "updatedAt": "2026-11-11T04:24:34.264Z",
+    "trackingId": "MS-50312",
+    "service": "Custom Software",
+    "status": "Review"
+  },
+  "MS-29448": {
+    "attachments": [],
+    "mobile": "+919968198010",
+    "description": "jvkv",
+    "budget": 78966,
+    "createdAt": "2026-10-25T15:01:10.447Z",
+    "email": "mayank198010@gmail.com",
+    "name": "Mayank",
+    "status": "Pending",
+    "trackingId": "MS-29448",
+    "timestamp": {
+      "type": "firestore/timestamp/1.0",
+      "seconds": 1792940470,
+      "nanoseconds": 828000000
+    },
+    "service": "Web Development",
+    "updatedAt": "2026-11-11T04:24:35.829Z"
+  },
+  "MS-58018": {
+    "service": "3D WebGL & Three.js",
+    "trackingId": "MS-58018",
+    "name": "Try",
+    "timestamp": {
+      "type": "firestore/timestamp/1.0",
+      "seconds": 1791255598,
+      "nanoseconds": 695000000
+    },
+    "email": "try758773@gmail.com",
+    "status": "Pending",
+    "mobile": "09968198010",
+    "createdAt": "2026-10-06T02:59:58.387Z",
+    "budget": 96687,
+    "description": "Dsxa",
+    "attachments": [],
+    "updatedAt": "2026-11-11T04:24:37.330Z"
+  },
+  "MS-DEVICE-TEST-777": {
+    "status": "Pending",
+    "service": "Web Development",
+    "trackingId": "MS-DEVICE-TEST-777",
+    "budget": 45000,
+    "email": "client.test@mayankzen.in",
+    "description": "Simulating a client submission from a smartphone on mayankzen.in",
+    "name": "Mobile Phone User",
+    "createdAt": "2026-11-11T04:26:14.659Z",
+    "mobile": "+91 99999 88888",
+    "attachments": [],
+    "updatedAt": "2026-11-11T04:26:15.810Z"
+  },
+  "MS-DEVICE-TEST-999": {
+    "budget": 65000,
+    "status": "Pending",
+    "description": "Testing live multi-device automated email flow on MayankZen Studios.",
+    "email": "client999@mayankzen.in",
+    "trackingId": "MS-DEVICE-TEST-999",
+    "mobile": "+91 91234 56789",
+    "createdAt": "2026-11-11T04:27:52.562Z",
+    "name": "Global Mobile Client",
+    "service": "Custom Software",
+    "attachments": [],
+    "updatedAt": "2026-11-11T04:27:53.611Z"
   }
 }

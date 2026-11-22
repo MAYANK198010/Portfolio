@@ -6,11 +6,14 @@ import { ServerDB } from './server-db.js';
 import { 
   sendAllProjectSubmissionEmails, 
   sendNewProjectAdminAlertEmail, 
-  sendServiceRequestConfirmationEmail, 
+  sendServiceRequestConfirmationEmail,
+  sendStatusUpdateEmail,
+  clearTransporterCache,
   getEmailLogs, 
   loadEnvFile,
   getSmtpConfig 
 } from './emailService.js';
+import { startFirebaseBridge } from './firebase-bridge.js';
 
 // Ensure .env is loaded on initialization
 loadEnvFile();
@@ -197,25 +200,84 @@ app.post('/api/email/test', async (req, res) => {
 // Resend Confirmation & Notification Email by Tracking ID
 app.post('/api/email/resend/:trackingId', async (req, res) => {
   try {
-    const request = ServerDB.getRequestById(req.params.trackingId);
+    let request = ServerDB.getRequestById(req.params.trackingId);
+    if (!request && req.body && req.body.trackingId) {
+      request = req.body;
+      try { ServerDB.saveRequest(request); } catch (e) {}
+    }
     if (!request) {
-      return res.status(404).json({ success: false, message: 'Request not found' });
+      return res.status(404).json({ success: false, sentLive: false, message: 'Request not found in database' });
     }
     const result = await sendAllProjectSubmissionEmails(request);
     res.json(result);
   } catch (err) {
     console.error('Resend email API error:', err);
+    res.status(500).json({ success: false, sentLive: false, message: err.message });
+  }
+});
+
+// Explicit endpoint to send project status update email to client
+app.post('/api/email/status-update', async (req, res) => {
+  try {
+    const { trackingId, newStatus, oldStatus, note, request } = req.body;
+    let targetRequest = request || (trackingId ? ServerDB.getRequestById(trackingId) : null);
+    if (!targetRequest) {
+      return res.status(400).json({ success: false, sentLive: false, message: 'Target request or trackingId required' });
+    }
+    const result = await sendStatusUpdateEmail(targetRequest, { newStatus, oldStatus, note });
+    res.json(result);
+  } catch (err) {
+    console.error('Status update email API error:', err);
+    res.status(500).json({ success: false, sentLive: false, message: err.message });
+  }
+});
+
+// Clear cached SMTP connections (useful if .env or credentials changed)
+app.post('/api/email/clear-cache', (req, res) => {
+  try {
+    clearTransporterCache();
+    loadEnvFile();
+    res.json({ success: true, message: 'SMTP transporter cache cleared and .env reloaded.' });
+  } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-app.put('/api/db/requests/:id', (req, res) => {
+// Trigger a manual sweep of unsent requests from Cloud Firestore & RTDB
+app.post('/api/email/sweep', async (req, res) => {
   try {
+    const { sweepUnsentRequests } = await import('./firebase-bridge.js');
+    await sweepUnsentRequests();
+    res.json({ success: true, message: 'Cloud sweep completed.' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.put('/api/db/requests/:id', async (req, res) => {
+  try {
+    const old = ServerDB.getRequestById(req.params.id);
+    const oldStatus = old?.status;
     const updated = ServerDB.updateRequest(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ success: false, message: 'Request not found' });
     }
-    res.json({ success: true, data: updated });
+
+    // If status changed and notifyClient is true (or client email exists), dispatch update email
+    let emailResult = null;
+    if (req.body.notifyClient && updated.email && updated.status !== oldStatus) {
+      try {
+        emailResult = await sendStatusUpdateEmail(updated, {
+          newStatus: updated.status,
+          oldStatus,
+          note: req.body.statusNote || ''
+        });
+      } catch (emErr) {
+        console.warn('Status update email error:', emErr.message);
+      }
+    }
+
+    res.json({ success: true, data: updated, emailResult });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -479,11 +541,19 @@ app.get('/dashboard', (req, res) => {
   res.sendFile(path.join(__dirname, 'dashboard', 'index.html'));
 });
 
-// Fallback to index.html
+// Return 404 for missing static assets instead of serving index.html as text/html
 app.get('*', (req, res) => {
+  if (/\.(js|mjs|css|map|json|png|jpg|jpeg|gif|svg|ico|webp|woff2?|ttf|eot|wasm)$/i.test(req.path)) {
+    return res.status(404).send('Asset not found');
+  }
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`MayankZen Studios running at http://0.0.0.0:${PORT}`);
+  try {
+    startFirebaseBridge();
+  } catch (err) {
+    console.error('Failed to start Firebase Bridge:', err);
+  }
 });

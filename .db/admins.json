@@ -1,0 +1,16 @@
+[
+  {
+    "email": "admin@mayankzen.in",
+    "name": "Studio Admin",
+    "role": "admin",
+    "isMaster": true,
+    "addedAt": "2026-11-11T04:14:13.282Z"
+  },
+  {
+    "email": "mayank198010@gmail.com",
+    "name": "Mayank (Founder)",
+    "role": "admin",
+    "isMaster": true,
+    "addedAt": "2026-11-11T04:14:13.282Z"
+  }
+]

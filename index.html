@@ -66,6 +66,10 @@
 
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script>
+    (function(){var t=localStorage.getItem('mz_theme')||'dark';document.documentElement.setAttribute('data-theme',t);if(t==='light')document.documentElement.classList.add('light-mode');})();
+  </script>
+  <script src="/theme.js"></script>
 
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-C3327HSWDQ"></script>
@@ -233,6 +237,19 @@
             "position": 7,
             "item": {
               "@type": "WebApplication",
+              "name": "PDF EDITOR",
+              "url": "https://mayank198010.github.io/PDF-EDITOR/",
+              "applicationCategory": "UtilitiesApplication",
+              "operatingSystem": "All",
+              "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+              "description": "100% free and completely ads-free browser-based PDF editor for fast, private document editing without watermarks or signups."
+            }
+          },
+          {
+            "@type": "ListItem",
+            "position": 8,
+            "item": {
+              "@type": "WebApplication",
               "name": "Relm of Gods",
               "url": "https://mayankzen.in/#portfolio",
               "applicationCategory": "GameApplication",
@@ -243,7 +260,7 @@
           },
           {
             "@type": "ListItem",
-            "position": 8,
+            "position": 9,
             "item": {
               "@type": "WebApplication",
               "name": "AI Zen",
@@ -256,7 +273,7 @@
           },
           {
             "@type": "ListItem",
-            "position": 9,
+            "position": 10,
             "item": {
               "@type": "WebApplication",
               "name": "Rakshak",
@@ -342,7 +359,15 @@
     </ul>
   </nav>
 
-  <button class="menu-toggle" id="menuBtn" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="navMenu">☰</button>
+  <div class="nav-controls">
+    <button class="theme-toggle-btn" id="themeToggleBtn" aria-label="Toggle light/dark theme" title="Toggle theme">
+      <span class="theme-icon-wrap">
+        <i class="fa-solid fa-sun icon-sun" aria-hidden="true"></i>
+        <i class="fa-solid fa-moon icon-moon" aria-hidden="true"></i>
+      </span>
+    </button>
+    <button class="menu-toggle" id="menuBtn" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="navMenu">☰</button>
+  </div>
 </header>
 
 <!-- ===== HERO ===== -->
@@ -551,7 +576,18 @@
       </div>
     </div>
 
-    <!-- 7: Relm of Gods -->
+    <!-- 7: PDF EDITOR -->
+    <div class="card" data-category="web">
+      <span class="status live"><i class="fa-solid fa-bolt"></i> Live</span>
+      <h3>PDF EDITOR</h3>
+      <p>100% free and completely ads-free online PDF editor for effortless document editing and export directly in the browser — zero watermarks, zero signups.</p>
+      <div class="card-actions">
+        <a href="https://mayank198010.github.io/PDF-EDITOR/" target="_blank" rel="noopener noreferrer" class="btn primary btn-sm"><i class="fa-solid fa-arrow-up-right-from-square"></i> Visit Website</a>
+        <button class="btn secondary btn-sm" onclick="openProjectModal('PDF EDITOR', 'A fast, 100% free and completely ads-free browser-based PDF editor built for seamless PDF editing, viewing, and management with zero ads, zero paywalls, and full privacy.', 'HTML5, CSS3, JavaScript, Client-Side PDF Processing, GitHub Pages', 'https://mayank198010.github.io/PDF-EDITOR/')"><i class="fa-solid fa-eye"></i> Details</button>
+      </div>
+    </div>
+
+    <!-- 8: Relm of Gods -->
     <div class="card" data-category="game">
       <span class="status working"><i class="fa-solid fa-dragon"></i> 3D In Progress</span>
       <h3>Relm of Gods</h3>
@@ -561,7 +597,7 @@
       </div>
     </div>
 
-    <!-- 8: AI Zen -->
+    <!-- 9: AI Zen -->
     <div class="card" data-category="ai">
       <span class="status working"><i class="fa-solid fa-microchip"></i> Active Build</span>
       <h3>AI Zen</h3>
@@ -571,7 +607,7 @@
       </div>
     </div>
 
-    <!-- 9: Rakshak -->
+    <!-- 10: Rakshak -->
     <div class="card" data-category="web">
       <span class="status working"><i class="fa-solid fa-shield-halved"></i> Active Build</span>
       <h3>Rakshak</h3>

@@ -11,8 +11,10 @@
   },
   "dependencies": {
     "express": "^4.21.2",
+    "firebase": "^13.2.0",
     "nodemailer": "^10.0.14",
     "sharp": "^0.35.3",
+    "three": "^0.186.1",
     "to-ico": "^1.1.5"
   }
 }

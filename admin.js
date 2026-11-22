@@ -475,6 +475,14 @@ window.openEditRequestModal = function(id) {
   document.getElementById('editReqBudget').value = req.budget || 0;
   document.getElementById('editReqStatus').value = req.status || 'Pending';
 
+  const noteInput = document.getElementById('editReqStatusNote');
+  if (noteInput) noteInput.value = '';
+
+  const notifyCheck = document.getElementById('editReqNotifyEmail');
+  if (notifyCheck) {
+    notifyCheck.checked = Boolean(req.email && req.email.includes('@'));
+  }
+
   document.getElementById('adminEditModal').classList.add('open');
 };
 
@@ -489,15 +497,25 @@ window.handleUpdateRequestSubmit = async function(event) {
   const service = document.getElementById('editReqService').value;
   const budget = Number(document.getElementById('editReqBudget').value) || 0;
   const status = document.getElementById('editReqStatus').value;
+  const notifyClient = Boolean(document.getElementById('editReqNotifyEmail')?.checked);
+  const statusNote = document.getElementById('editReqStatusNote')?.value?.trim() || '';
 
   try {
+    let emailResult = null;
+
     // 1. Update in Persistent Server DB (using trackingId)
     try {
-      await fetch(`/api/db/requests/${encodeURIComponent(trackingId)}`, {
+      const apiRes = await fetch(`/api/db/requests/${encodeURIComponent(trackingId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ service, budget, status })
+        body: JSON.stringify({ service, budget, status, notifyClient, statusNote })
       });
+      if (apiRes.ok) {
+        const json = await apiRes.json();
+        if (json.emailResult) {
+          emailResult = json.emailResult;
+        }
+      }
     } catch (apiErr) {
       console.debug("Server DB update notice:", apiErr);
     }
@@ -538,7 +556,14 @@ window.handleUpdateRequestSubmit = async function(event) {
     renderMetricsAndCharts();
     renderTable(allRequests);
     closeAdminEditModal();
-    showToast("Project request updated successfully!", "success");
+
+    if (emailResult && emailResult.sentLive) {
+      showToast(`Project updated & milestone email sent to ${emailResult.recipient || 'client'}!`, 'success');
+    } else if (emailResult && emailResult.unblockRequired) {
+      showToast("Project updated! (Zoho outbound unblock required at mail.zoho.in/UnblockMe)", "warning");
+    } else {
+      showToast("Project request updated successfully!", "success");
+    }
   } catch (err) {
     console.error("Update request error:", err);
     showToast("Failed to update: " + err.message, "error");
@@ -1131,11 +1156,11 @@ window.triggerTestEmail = async function() {
   const email = (input?.value || 'account@mayankzen.in').trim();
 
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending Alert...';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Dispatching Test...';
   if (statusDiv) {
     statusDiv.style.display = 'block';
     statusDiv.style.color = 'var(--text-secondary)';
-    statusDiv.innerHTML = 'Connecting to SMTP server (smtp.zoho.in)...';
+    statusDiv.innerHTML = 'Connecting to SMTP server (smtp.zoho.in:465/587)...';
   }
 
   try {
@@ -1146,24 +1171,25 @@ window.triggerTestEmail = async function() {
     });
     const data = await res.json();
 
-    const adminOk = data.adminAlert?.sentLive || data.sentLive;
-    if (adminOk) {
-      showToast(`Test notification successfully delivered to account@mayankzen.in!`, 'success');
+    const ok = Boolean(data.sentLive || data.adminAlert?.sentLive || data.clientConfirmation?.sentLive);
+    if (ok) {
+      showToast(`Test alert successfully delivered to ${email}!`, 'success');
       if (statusDiv) {
         statusDiv.style.color = '#34d399';
-        statusDiv.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Success:</strong> Live new-project alert dispatched to <strong>account@mayankzen.in</strong> via SMTP! Check your inbox.`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>Success:</strong> Live test alert dispatched via SMTP! Delivered to: <strong>${escapeHtml(email)}</strong>.`;
       }
-    } else if (data.unblockRequired || data.adminAlert?.unblockRequired) {
+    } else if (data.unblockRequired || data.adminAlert?.unblockRequired || data.clientConfirmation?.unblockRequired) {
       showToast('Zoho outbound verification notice', 'warning');
       if (statusDiv) {
         statusDiv.style.color = '#facc15';
         statusDiv.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <strong>Zoho Unblock Required:</strong> <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock outbound emails at mail.zoho.in/UnblockMe</a>.`;
       }
     } else {
-      showToast(`Email trigger recorded (${data.status || 'Queued'})`, 'info');
+      const errMsg = data.error || data.adminAlert?.error || data.clientConfirmation?.error || 'Dispatched and recorded in audit log.';
+      showToast(`Email status: ${errMsg}`, 'info');
       if (statusDiv) {
         statusDiv.style.color = '#cbd5e1';
-        statusDiv.innerHTML = `<i class="fa-solid fa-info-circle"></i> Result: ${data.adminAlert?.error || data.error || 'Dispatched and recorded in audit log.'}`;
+        statusDiv.innerHTML = `<i class="fa-solid fa-info-circle"></i> Result: ${escapeHtml(errMsg)}`;
       }
     }
     loadEmailLogs();
@@ -1183,20 +1209,49 @@ window.resendConfirmationEmail = async function(trackingId) {
   if (!trackingId || trackingId === 'N/A') return;
   showToast(`Resending email for ${trackingId}...`, 'info');
   try {
+    const matchedReq = allRequests.find(r => r.trackingId === trackingId);
     const res = await fetch(`/api/email/resend/${encodeURIComponent(trackingId)}`, {
-      method: 'POST'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(matchedReq || {})
     });
     const data = await res.json();
-    if (data.sentLive) {
+    const sent = Boolean(data.sentLive || data.clientSent || data.adminSent);
+    if (sent) {
       showToast(`Confirmation email for ${trackingId} resent successfully!`, 'success');
     } else if (data.unblockRequired) {
       showToast(`Zoho unblock needed: Visit mail.zoho.in/UnblockMe`, 'warning');
     } else {
-      showToast(`Email trigger recorded (${data.status || 'queued'})`, 'info');
+      showToast(`Email status: ${data.error || data.status || 'Recorded in logs'}`, 'info');
     }
     loadEmailLogs();
   } catch (e) {
     showToast('Resend failed: ' + e.message, 'error');
+  }
+};
+
+window.clearSmtpCache = async function() {
+  showToast('Reconnecting SMTP transporter...', 'info');
+  try {
+    const res = await fetch('/api/email/clear-cache', { method: 'POST' });
+    const json = await res.json();
+    showToast(json.message || 'SMTP cache reset.', 'success');
+    loadEmailLogs();
+  } catch (e) {
+    showToast('Failed to reset SMTP: ' + e.message, 'error');
+  }
+};
+
+window.sweepAndRetryPending = async function() {
+  showToast('Sweeping cloud database for new requests...', 'info');
+  try {
+    const res = await fetch('/api/email/sweep', { method: 'POST' });
+    const json = await res.json();
+    showToast(json.message || 'Cloud requests synced and processed.', 'success');
+    loadRequests();
+    loadEmailLogs();
+  } catch (e) {
+    showToast('Failed to sync cloud requests: ' + e.message, 'error');
   }
 };
 

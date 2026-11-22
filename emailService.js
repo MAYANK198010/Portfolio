@@ -16,32 +16,28 @@ if (!fs.existsSync(dbDir)) {
 }
 
 /**
- * Loads .env file if present in the project directory
+ * Robustly parses and loads .env file into process.env
  */
 export function loadEnvFile() {
   const envPath = path.join(__dirname, '.env');
   if (fs.existsSync(envPath)) {
     try {
-      if (typeof process.loadEnvFile === 'function') {
-        process.loadEnvFile(envPath);
-      } else {
-        const content = fs.readFileSync(envPath, 'utf8');
-        content.split('\n').forEach(line => {
-          const trimmed = line.trim();
-          if (trimmed && !trimmed.startsWith('#')) {
-            const eqIdx = trimmed.indexOf('=');
-            if (eqIdx !== -1) {
-              const k = trimmed.substring(0, eqIdx).trim();
-              const v = trimmed.substring(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
-              if (!process.env[k] || process.env[k] === '') {
-                process.env[k] = v;
-              }
+      const content = fs.readFileSync(envPath, 'utf8');
+      content.split('\n').forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#')) {
+          const eqIdx = trimmed.indexOf('=');
+          if (eqIdx !== -1) {
+            const k = trimmed.substring(0, eqIdx).trim();
+            const v = trimmed.substring(eqIdx + 1).trim().replace(/^['"]|['"]$/g, '');
+            if (v !== '') {
+              process.env[k] = v;
             }
           }
-        });
-      }
+        }
+      });
     } catch (e) {
-      console.debug('[EmailService] Error loading .env:', e.message);
+      console.debug('[EmailService] Error parsing .env:', e.message);
     }
   }
 }
@@ -59,7 +55,13 @@ export function getSmtpConfig() {
   const user = (process.env.SMTP_USER || process.env.EMAIL_USER || 'accounts@mayankzen.in').trim();
   const pass = (process.env.SMTP_PASS || process.env.EMAIL_PASS || '').trim();
   const notificationEmail = (process.env.NOTIFICATION_EMAIL || 'account@mayankzen.in').trim();
-  const emailFrom = (process.env.EMAIL_FROM || `"MayankZen Studios" <${user}>`).trim();
+  
+  let emailFrom = (process.env.EMAIL_FROM || '').trim();
+  if (!emailFrom) {
+    emailFrom = `"MayankZen Studios" <${user}>`;
+  } else if (!emailFrom.includes('<') && emailFrom.includes('@')) {
+    emailFrom = `"MayankZen Studios" <${emailFrom}>`;
+  }
 
   return {
     host,
@@ -104,8 +106,20 @@ function logEmailDispatch(emailData) {
   }
 }
 
+// Transporter cache & pool to avoid connection churn and Zoho rate-limits
+let cachedTransporter = null;
+let cachedTransporterKey = null;
+
+export function clearTransporterCache() {
+  if (cachedTransporter && typeof cachedTransporter.close === 'function') {
+    try { cachedTransporter.close(); } catch (e) {}
+  }
+  cachedTransporter = null;
+  cachedTransporterKey = null;
+}
+
 /**
- * Builds and verifies an active nodemailer transporter with automatic host failover
+ * Builds and verifies an active nodemailer transporter with automatic host & port failover
  */
 export async function getTransporter() {
   const cfg = getSmtpConfig();
@@ -113,31 +127,62 @@ export async function getTransporter() {
   if (!cfg.user || !cfg.pass) {
     return {
       transporter: null,
-      error: 'SMTP credentials (SMTP_USER/SMTP_PASS) not configured in .env',
+      error: 'SMTP credentials (SMTP_USER / SMTP_PASS) not configured in .env',
       cfg
     };
   }
 
-  const candidateHosts = [];
-  // For accounts with .in domains (mayankzen.in), Zoho India host smtp.zoho.in is the authoritative SMTP endpoint
-  if (cfg.user.includes('.in') || cfg.notificationEmail.includes('.in') || (cfg.host && cfg.host.includes('.in'))) {
-    candidateHosts.push('smtp.zoho.in', 'smtppro.zoho.in');
+  const currentKey = `${cfg.host}:${cfg.port}:${cfg.user}:${cfg.pass}`;
+  if (cachedTransporter && cachedTransporterKey === currentKey) {
+    return {
+      transporter: cachedTransporter,
+      host: cfg.host,
+      port: cfg.port,
+      cfg
+    };
   }
-  if (cfg.host) candidateHosts.push(cfg.host);
-  if (cfg.host.includes('zoho') || !cfg.host) {
-    candidateHosts.push('smtp.zoho.in', 'smtppro.zoho.in', 'smtp.zoho.com', 'smtppro.zoho.com');
-  }
-  const uniqueHosts = [...new Set(candidateHosts)];
 
-  for (const host of uniqueHosts) {
+  // Build candidate configurations (ordered by highest likelihood of delivery)
+  const candidateConfigs = [];
+
+  // Primary specified config
+  candidateConfigs.push({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465
+  });
+
+  // Zoho India endpoints (authoritative for mayankzen.in and .in domains)
+  candidateConfigs.push(
+    { host: 'smtp.zoho.in', port: 465, secure: true },
+    { host: 'smtp.zoho.in', port: 587, secure: false, requireTLS: true },
+    { host: 'smtppro.zoho.in', port: 465, secure: true },
+    { host: 'smtppro.zoho.in', port: 587, secure: false, requireTLS: true },
+    { host: 'smtp.zoho.com', port: 465, secure: true },
+    { host: 'smtp.zoho.com', port: 587, secure: false, requireTLS: true }
+  );
+
+  // De-duplicate configs
+  const seen = new Set();
+  const uniqueConfigs = candidateConfigs.filter(c => {
+    const key = `${c.host}:${c.port}:${c.secure}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  let lastError = null;
+
+  for (const conf of uniqueConfigs) {
     try {
-      const port = (host === cfg.host && cfg.port) ? cfg.port : (host.includes('zoho') ? 465 : cfg.port);
-      const secure = port === 465;
-
       const transporter = nodemailer.createTransport({
-        host,
-        port,
-        secure,
+        pool: true,
+        maxConnections: 3,
+        maxMessages: 100,
+        host: conf.host,
+        port: conf.port,
+        secure: conf.secure,
+        requireTLS: conf.requireTLS || false,
         auth: {
           user: cfg.user,
           pass: cfg.pass
@@ -145,31 +190,36 @@ export async function getTransporter() {
         tls: {
           rejectUnauthorized: false
         },
-        connectionTimeout: 8000,
-        greetingTimeout: 8000
+        connectionTimeout: 7000,
+        greetingTimeout: 7000
       });
 
       await transporter.verify();
+
+      cachedTransporter = transporter;
+      cachedTransporterKey = currentKey;
+
       return {
         transporter,
-        host,
-        port,
+        host: conf.host,
+        port: conf.port,
         cfg
       };
     } catch (err) {
-      console.warn(`[EmailService] SMTP host ${host} connection failed: ${err.message}`);
+      lastError = err;
+      console.warn(`[EmailService] SMTP endpoint ${conf.host}:${conf.port} failed: ${err.message}`);
     }
   }
 
   return {
     transporter: null,
-    error: 'Could not establish connection to any SMTP host',
+    error: lastError ? lastError.message : 'Could not establish connection to any SMTP host',
     cfg
   };
 }
 
 /**
- * Automatically triggers an admin alert email to account@mayankzen.in
+ * Automatically triggers an admin alert email to the studio notification address
  * whenever a new project request is submitted.
  */
 export async function sendNewProjectAdminAlertEmail(request) {
@@ -184,7 +234,7 @@ export async function sendNewProjectAdminAlertEmail(request) {
   const clientName = request.name || 'Anonymous Client';
   const clientEmail = request.email || 'Not provided';
   const clientMobile = request.mobile || request.phone || 'Not provided';
-  const budget = request.budget ? `$${request.budget}` : 'Custom Scope';
+  const budget = request.budget ? `₹${Number(request.budget).toLocaleString('en-IN')}` : 'Custom Scope';
   const status = request.status || 'Pending';
   const description = request.description || request.brief || 'No description provided';
   const attachments = Array.isArray(request.attachments) ? request.attachments : [];
@@ -320,7 +370,7 @@ export async function sendNewProjectAdminAlertEmail(request) {
                     <a href="${trackUrl}" target="_blank" style="display: inline-block; padding: 12px 20px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.15); color: #ffffff; text-decoration: none; font-weight: 600; font-size: 13px; border-radius: 8px; margin: 4px;">
                       View Live Tracker
                     </a>
-                    ${clientEmail && clientEmail !== 'Not provided' ? `
+                    ${clientEmail && clientEmail.includes('@') ? `
                     <a href="mailto:${escapeHtml(clientEmail)}?subject=Re:%20MayankZen%20Project%20Request%20[${encodeURIComponent(trackingId)}]" style="display: inline-block; padding: 12px 20px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); color: #34d399; text-decoration: none; font-weight: 700; font-size: 13px; border-radius: 8px; margin: 4px;">
                       Reply to Client
                     </a>
@@ -376,6 +426,7 @@ Reply Direct: mailto:${clientEmail}?subject=Re:%20MayankZen%20Project%20Request%
 
   let sentLive = false;
   let deliveryError = null;
+  let unblockRequired = false;
   let messageId = null;
 
   try {
@@ -407,6 +458,9 @@ Reply Direct: mailto:${clientEmail}?subject=Re:%20MayankZen%20Project%20Request%
     }
   } catch (err) {
     deliveryError = err.message;
+    if (err.message.includes('Unusual sending activity detected') || err.message.includes('UnblockMe')) {
+      unblockRequired = true;
+    }
     console.error(`[EmailService] Error dispatching admin alert email to ${recipient}:`, err.message);
   }
 
@@ -422,6 +476,8 @@ Reply Direct: mailto:${clientEmail}?subject=Re:%20MayankZen%20Project%20Request%
     sentLive,
     type: 'admin_alert',
     error: deliveryError,
+    unblockRequired,
+    unblockUrl: unblockRequired ? 'https://mail.zoho.in/UnblockMe' : null,
     messageId,
     deliveredAt: new Date().toISOString()
   });
@@ -433,6 +489,8 @@ Reply Direct: mailto:${clientEmail}?subject=Re:%20MayankZen%20Project%20Request%
     recipient,
     subject,
     messageId,
+    unblockRequired,
+    unblockUrl: unblockRequired ? 'https://mail.zoho.in/UnblockMe' : null,
     error: deliveryError
   };
 }
@@ -441,9 +499,10 @@ Reply Direct: mailto:${clientEmail}?subject=Re:%20MayankZen%20Project%20Request%
  * Sends a formal confirmation email to the client upon service request submission.
  */
 export async function sendServiceRequestConfirmationEmail(request) {
-  if (!request || !request.email) {
+  const cleanEmail = (request?.email || '').trim();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
     console.warn('[EmailService] Skipped sending confirmation email: No recipient email provided.');
-    return { success: false, message: 'No recipient email provided' };
+    return { success: false, sentLive: false, message: 'No valid recipient email provided' };
   }
 
   const cfg = getSmtpConfig();
@@ -451,7 +510,7 @@ export async function sendServiceRequestConfirmationEmail(request) {
   const serviceName = request.service || 'Custom Development Service';
   const clientName = request.name || 'Valued Client';
   const status = request.status || 'Pending';
-  const budget = request.budget ? `$${request.budget}` : 'Custom Scope';
+  const budget = request.budget ? `₹${Number(request.budget).toLocaleString('en-IN')}` : 'Custom Scope';
   const description = request.description || 'Details submitted via client portal';
   const dateStr = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -641,18 +700,18 @@ New Delhi, India
     if (transporter) {
       const clientInfo = await transporter.sendMail({
         from: `"MayankZen Studios" <${cfg.user}>`,
-        to: request.email,
-        replyTo: 'account@mayankzen.in',
+        to: cleanEmail,
+        replyTo: cfg.notificationEmail || 'account@mayankzen.in',
         subject: subject,
         text: textContent,
         html: htmlContent,
         headers: {
-          'X-Sender-Account': 'account@mayankzen.in',
+          'X-Sender-Account': cfg.user,
           'X-Tracking-ID': trackingId
         }
       });
 
-      console.log(`[EmailService] Client confirmation email successfully sent to ${request.email}: ${clientInfo.messageId}`);
+      console.log(`[EmailService] Client confirmation email successfully sent to ${cleanEmail}: ${clientInfo.messageId}`);
       clientSent = true;
       sentLive = true;
       messageId = clientInfo.messageId;
@@ -661,14 +720,15 @@ New Delhi, India
     }
   } catch (err) {
     deliveryError = err.message;
-    if (err.message.includes('Unusual sending activity detected')) {
+    if (err.message.includes('Unusual sending activity detected') || err.message.includes('UnblockMe')) {
       unblockRequired = true;
     }
+    console.error(`[EmailService] Error dispatching client confirmation email to ${cleanEmail}:`, err.message);
   }
 
   // Audit log
   logEmailDispatch({
-    recipient: request.email,
+    recipient: cleanEmail,
     clientName,
     service: serviceName,
     trackingId,
@@ -681,6 +741,7 @@ New Delhi, India
     error: deliveryError,
     unblockRequired,
     unblockUrl: unblockRequired ? 'https://mail.zoho.in/UnblockMe' : null,
+    messageId,
     deliveredAt: new Date().toISOString()
   });
 
@@ -689,40 +750,226 @@ New Delhi, India
     sentLive,
     clientSent,
     trackingId,
-    recipient: request.email,
+    recipient: cleanEmail,
     sender: cfg.user,
     status: sentLive ? 'sent' : (unblockRequired ? 'unblock_required' : 'logged_queued'),
     unblockRequired,
     unblockUrl: unblockRequired ? 'https://mail.zoho.in/UnblockMe' : null,
+    messageId,
     error: deliveryError
   };
 }
 
 /**
- * Dispatches all automated emails for a new project request submission:
- * 1. Admin Alert to account@mayankzen.in
+ * Sends a formal status update email to the client when their project progresses.
+ */
+export async function sendStatusUpdateEmail(request, { newStatus, oldStatus, note } = {}) {
+  const cleanEmail = (request?.email || '').trim();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    return { success: false, sentLive: false, message: 'No valid recipient email provided' };
+  }
+
+  const cfg = getSmtpConfig();
+  const trackingId = request.trackingId || 'MS-PROJECT';
+  const serviceName = request.service || 'Custom Development Service';
+  const clientName = request.name || 'Valued Client';
+  const currentStatus = newStatus || request.status || 'In Progress';
+  const trackUrl = `https://mayankzen.in/track/?id=${encodeURIComponent(trackingId)}`;
+  const subject = `Status Update [${trackingId}]: Now ${currentStatus} - ${serviceName} | MayankZen Studios`;
+
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Project Status Update</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #0b0f19; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f1f5f9;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #0b0f19; padding: 35px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 620px; background: #131b2e; border: 1px solid rgba(0, 240, 255, 0.25); border-radius: 16px; overflow: hidden; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+          <tr>
+            <td style="padding: 30px 35px; background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); border-bottom: 1px solid rgba(255,255,255,0.08);">
+              <div style="display: inline-block; padding: 4px 12px; background: rgba(0, 240, 255, 0.15); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 999px; color: #00f0ff; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px;">
+                Milestone Progress
+              </div>
+              <h1 style="margin: 0; font-size: 22px; font-weight: 800; color: #ffffff;">Project Status Update</h1>
+              <p style="margin: 4px 0 0; font-size: 13px; color: #94a3b8;">Tracking Reference: <strong style="color: #00f0ff;">${escapeHtml(trackingId)}</strong></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 30px 35px;">
+              <p style="margin: 0 0 16px; font-size: 15px; color: #e2e8f0;">Dear <strong>${escapeHtml(clientName)}</strong>,</p>
+              <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #cbd5e1;">
+                Your project <strong>${escapeHtml(serviceName)}</strong> has reached a new development milestone:
+              </p>
+
+              <table role="presentation" width="100%" style="background: rgba(15,23,42,0.8); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 18px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8; width: 35%;">New Status:</td>
+                  <td style="padding: 6px 0; font-size: 14px; font-weight: 800; color: #34d399;">${escapeHtml(currentStatus)}</td>
+                </tr>
+                ${oldStatus ? `
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8;">Previous Status:</td>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8;">${escapeHtml(oldStatus)}</td>
+                </tr>
+                ` : ''}
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8;">Updated On:</td>
+                  <td style="padding: 6px 0; font-size: 13px; color: #cbd5e1;">${escapeHtml(dateStr)}</td>
+                </tr>
+                ${note ? `
+                <tr>
+                  <td style="padding: 6px 0; font-size: 13px; color: #94a3b8; vertical-align: top;">Engineering Note:</td>
+                  <td style="padding: 6px 0; font-size: 13px; color: #e2e8f0; line-height: 1.5;">${escapeHtml(note)}</td>
+                </tr>
+                ` : ''}
+              </table>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-bottom: 25px;">
+                <tr>
+                  <td align="center">
+                    <a href="${trackUrl}" target="_blank" style="display: inline-block; padding: 13px 28px; background: linear-gradient(135deg, #00f0ff 0%, #0077ff 100%); color: #020617; text-decoration: none; font-weight: 800; font-size: 13px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0, 240, 255, 0.35);">
+                      View Real-Time Progress &rarr;
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0; font-size: 13px; color: #94a3b8; line-height: 1.6;">
+                You can review real-time deliverables and communicate directly with Mayank via the live project tracker link above.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  let sentLive = false;
+  let deliveryError = null;
+  let unblockRequired = false;
+  let messageId = null;
+
+  try {
+    const { transporter, error: connErr } = await getTransporter();
+    if (transporter) {
+      const info = await transporter.sendMail({
+        from: `"MayankZen Studios" <${cfg.user}>`,
+        to: cleanEmail,
+        replyTo: cfg.notificationEmail || 'account@mayankzen.in',
+        subject,
+        html: htmlContent,
+        headers: {
+          'X-Sender-Account': cfg.user,
+          'X-Tracking-ID': trackingId
+        }
+      });
+      sentLive = true;
+      messageId = info.messageId;
+    } else {
+      deliveryError = connErr || 'No active SMTP transporter available';
+    }
+  } catch (err) {
+    deliveryError = err.message;
+    if (err.message.includes('Unusual sending activity detected') || err.message.includes('UnblockMe')) {
+      unblockRequired = true;
+    }
+  }
+
+  logEmailDispatch({
+    recipient: cleanEmail,
+    clientName,
+    service: serviceName,
+    trackingId,
+    status: currentStatus,
+    sender: cfg.user,
+    subject,
+    sentLive,
+    type: 'status_update',
+    error: deliveryError,
+    unblockRequired,
+    unblockUrl: unblockRequired ? 'https://mail.zoho.in/UnblockMe' : null,
+    messageId,
+    deliveredAt: new Date().toISOString()
+  });
+
+  return {
+    success: sentLive,
+    sentLive,
+    trackingId,
+    recipient: cleanEmail,
+    status: currentStatus,
+    unblockRequired,
+    unblockUrl: unblockRequired ? 'https://mail.zoho.in/UnblockMe' : null,
+    messageId,
+    error: deliveryError
+  };
+}
+
+/**
+ * Dispatches all automated emails for a new project request submission concurrently:
+ * 1. Admin Alert to notification recipient(s)
  * 2. Client Confirmation to client's email (if provided)
  */
 export async function sendAllProjectSubmissionEmails(request) {
   if (!request) {
-    return { success: false, message: 'No request data provided' };
+    return { success: false, sentLive: false, message: 'No request data provided' };
   }
 
-  console.log(`[EmailService] Triggering submission emails for tracking ID: ${request.trackingId || 'N/A'}`);
+  const trackingId = request.trackingId || ('MS-' + Math.floor(1000 + Math.random() * 9000));
+  console.log(`[EmailService] Triggering submission emails for tracking ID: ${trackingId}`);
 
-  // 1. Trigger Admin Alert to account@mayankzen.in
-  const adminAlert = await sendNewProjectAdminAlertEmail(request);
+  const hasClientEmail = Boolean(request.email && typeof request.email === 'string' && request.email.trim().includes('@'));
 
-  // 2. Trigger Client Confirmation if client provided an email address
-  let clientConfirmation = null;
-  if (request.email && typeof request.email === 'string' && request.email.includes('@')) {
-    clientConfirmation = await sendServiceRequestConfirmationEmail(request);
-  } else {
-    console.log('[EmailService] Skipped client confirmation email: No valid client email provided.');
-  }
+  // Run admin alert and client confirmation concurrently via Promise.allSettled
+  const [adminSettled, clientSettled] = await Promise.allSettled([
+    sendNewProjectAdminAlertEmail(request),
+    hasClientEmail ? sendServiceRequestConfirmationEmail(request) : Promise.resolve(null)
+  ]);
+
+  const adminAlert = adminSettled.status === 'fulfilled' ? adminSettled.value : {
+    success: false,
+    sentLive: false,
+    error: adminSettled.reason?.message || 'Admin alert dispatch failed'
+  };
+
+  const clientConfirmation = clientSettled.status === 'fulfilled' ? clientSettled.value : {
+    success: false,
+    sentLive: false,
+    error: clientSettled.reason?.message || 'Client confirmation dispatch failed'
+  };
+
+  const adminSent = Boolean(adminAlert?.sentLive);
+  const clientSent = Boolean(clientConfirmation?.sentLive);
+  const sentLive = adminSent || clientSent;
+  const unblockRequired = Boolean(adminAlert?.unblockRequired || clientConfirmation?.unblockRequired);
+  const error = (!sentLive) ? (clientConfirmation?.error || adminAlert?.error || null) : null;
 
   return {
-    success: adminAlert.success || (clientConfirmation ? clientConfirmation.success : false),
+    success: sentLive,
+    sentLive,
+    clientSent,
+    adminSent,
+    trackingId,
+    recipient: request.email || null,
+    unblockRequired,
+    unblockUrl: unblockRequired ? 'https://mail.zoho.in/UnblockMe' : null,
+    error,
     adminAlert,
     clientConfirmation
   };

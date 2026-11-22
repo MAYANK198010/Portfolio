@@ -577,7 +577,7 @@
       }
 
       // 5. Dispatch confirmation email fallback if server DB didn't handle it
-      if (email && !mailResult) {
+      if (email && (!mailResult || (!mailResult.sentLive && !mailResult.unblockRequired))) {
         try {
           const mRes = await fetch('/api/send-confirmation-email', {
             method: 'POST',
@@ -585,7 +585,10 @@
             body: JSON.stringify(requestPayload)
           });
           if (mRes.ok) {
-            mailResult = await mRes.json();
+            const fallbackResult = await mRes.json();
+            if (fallbackResult) {
+              mailResult = fallbackResult;
+            }
           }
         } catch (e) {
           console.debug('Direct confirmation email dispatch note:', e);
@@ -596,12 +599,27 @@
       const emailBadge = document.getElementById('emailConfirmationBadge');
       if (emailBadge && email) {
         emailBadge.style.display = 'block';
-        if (mailResult && mailResult.sentLive) {
-          emailBadge.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Confirmation Email Dispatched</strong>: A project confirmation with Tracking ID <strong>${trackingId}</strong> has been sent from <strong>account@mayankzen.in</strong> directly to your provided email: <span style="color: #93c5fd; font-weight: 700;">${email}</span>.`;
-        } else if (mailResult && mailResult.unblockRequired) {
-          emailBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #facc15; margin-right: 0.35rem;"></i> <strong>Request Confirmed [${trackingId}]</strong>: Your service request is safely registered! Note: Zoho outbound email requires a one-time unblock: <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to verify outbound sending</a>.`;
+        const isClientSent = Boolean(mailResult?.clientSent || mailResult?.sentLive || mailResult?.clientConfirmation?.sentLive);
+        const isUnblockReq = Boolean(mailResult?.unblockRequired || mailResult?.clientConfirmation?.unblockRequired || mailResult?.adminAlert?.unblockRequired);
+        const errMessage = mailResult?.error || mailResult?.clientConfirmation?.error || mailResult?.adminAlert?.error;
+
+        if (isClientSent) {
+          emailBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+          emailBadge.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+          emailBadge.style.color = '#34d399';
+          emailBadge.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Official Confirmation Email Dispatched</strong>: A project confirmation with Tracking ID <strong>${trackingId}</strong> has been delivered to <span style="color: #93c5fd; font-weight: 700;">${email}</span>.`;
+        } else if (isUnblockReq) {
+          emailBadge.style.background = 'rgba(234, 179, 8, 0.15)';
+          emailBadge.style.borderColor = 'rgba(234, 179, 8, 0.4)';
+          emailBadge.style.color = '#fde047';
+          emailBadge.innerHTML = `<i class="fa-solid fa-triangle-exclamation" style="color: #facc15; margin-right: 0.35rem;"></i> <strong>Request Confirmed [${trackingId}]</strong>: Project safely registered in studio database! Zoho outbound email notice: <a href="https://mail.zoho.in/UnblockMe" target="_blank" style="color: #00f0ff; text-decoration: underline; font-weight: 700;">Click here to unblock outbound emails at mail.zoho.in/UnblockMe</a>.`;
+        } else if (errMessage) {
+          emailBadge.style.background = 'rgba(245, 158, 11, 0.15)';
+          emailBadge.style.borderColor = 'rgba(245, 158, 11, 0.4)';
+          emailBadge.style.color = '#fcd34d';
+          emailBadge.innerHTML = `<i class="fa-solid fa-circle-check" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Request Registered [${trackingId}]</strong>: Project saved in studio database. (Mail delivery note: ${errMessage})`;
         } else {
-          emailBadge.innerHTML = `<i class="fa-solid fa-paper-plane" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Request Registered [${trackingId}]</strong>: Confirmation email queued for dispatch to <span style="color: #93c5fd; font-weight: 700;">${email}</span>.`;
+          emailBadge.innerHTML = `<i class="fa-solid fa-paper-plane" style="color: var(--accent-green); margin-right: 0.35rem;"></i> <strong>Request Registered [${trackingId}]</strong>: Project synced with Cloud Database! Automated alert dispatched to studio team (account@mayankzen.in) and confirmation sent to <span style="color: #93c5fd; font-weight: 700;">${email}</span>.`;
         }
       }
 

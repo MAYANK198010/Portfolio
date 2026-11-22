@@ -28,7 +28,10 @@ service cloud.firestore {
     match /service_requests/{requestId} {
       allow read: if true;
       allow create: if request.resource.data.trackingId is string;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['emailDispatched', 'emailDispatchedAt', 'emailResult', 'processedByServer'])
+      );
+      allow delete: if isAdmin();
     }
 
     // User Profiles: accessible by the authenticated user or authorized admin

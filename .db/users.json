@@ -49,5 +49,45 @@
     "role": "user",
     "createdAt": "2026-10-14T13:32:55.494Z",
     "lastActive": "2026-10-14T13:32:55.494Z"
+  },
+  "rohit@example.com": {
+    "id": "usr_1791985698654_lokm3f",
+    "email": "rohit@example.com",
+    "name": "Rohit Verma",
+    "role": "user",
+    "createdAt": "2026-10-14T13:48:18.653Z",
+    "lastActive": "2026-10-14T13:48:18.654Z"
+  },
+  "killsham908@gmail.com": {
+    "id": "usr_1794371074265_thd5b0",
+    "email": "killsham908@gmail.com",
+    "name": "Kill Sham",
+    "role": "user",
+    "createdAt": "2026-10-05T07:29:38.927Z",
+    "lastActive": "2026-11-11T04:24:34.265Z"
+  },
+  "try758773@gmail.com": {
+    "id": "usr_1794371077331_n1yts2",
+    "email": "try758773@gmail.com",
+    "name": "Try",
+    "role": "user",
+    "createdAt": "2026-10-06T02:59:58.387Z",
+    "lastActive": "2026-11-11T04:24:37.331Z"
+  },
+  "client.test@mayankzen.in": {
+    "id": "usr_1794371175811_33rqgi",
+    "email": "client.test@mayankzen.in",
+    "name": "Mobile Phone User",
+    "role": "user",
+    "createdAt": "2026-11-11T04:26:14.659Z",
+    "lastActive": "2026-11-11T04:26:15.811Z"
+  },
+  "client999@mayankzen.in": {
+    "id": "usr_1794371273612_ye2h4u",
+    "email": "client999@mayankzen.in",
+    "name": "Global Mobile Client",
+    "role": "user",
+    "createdAt": "2026-11-11T04:27:52.562Z",
+    "lastActive": "2026-11-11T04:27:53.612Z"
   }
 }
